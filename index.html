@@ -769,7 +769,28 @@ pushSync(true);
 // localhost counts as a secure context too, so allow it — otherwise the
 // offline shell can never be exercised outside of production.
 if("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost","127.0.0.1"].includes(location.hostname))){
-  navigator.serviceWorker.register("sw.js").catch(()=>{});
+  // Serving the shell cache-first means a deploy would otherwise sit unseen
+  // until some later launch — and a home-screen PWA on iOS is especially
+  // reluctant to notice. Reload once when a new worker takes over so an
+  // update lands in the launch that finds it.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+    // Ignore the very first claim: that's this page going from uncontrolled
+    // to controlled, not a new version arriving.
+    if(!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+
+  navigator.serviceWorker.register("sw.js").then(reg=>{
+    reg.update().catch(()=>{});
+    // Returning to the app is the moment worth re-checking; iOS often skips
+    // the check on its own.
+    document.addEventListener("visibilitychange", ()=>{
+      if(document.visibilityState === "visible") reg.update().catch(()=>{});
+    });
+  }).catch(()=>{});
 }
 </script>
 </body>
