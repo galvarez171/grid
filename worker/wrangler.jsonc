@@ -1,0 +1,29 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "grid-sync",
+	"main": "src/index.js",
+	"compatibility_date": "2026-08-06",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1
+	},
+	// Set to the GitHub Pages origin Grid is served from (no trailing slash).
+	// Comma-separated if a second origin is ever added.
+	"vars": {
+		"ALLOWED_ORIGIN": "https://galvarez171.github.io"
+	},
+	// No "id" on purpose: wrangler provisions the namespace on first deploy and
+	// writes the id back here. GRID_TOKEN is a secret, set with `wrangler secret
+	// put` — it never appears in this file.
+	"kv_namespaces": [
+		{
+			"binding": "GRID_KV",
+			"id": "32aec2d481754f109643f7cd65273c2a"
+		}
+	]
+	// Step 4 of PLAN_V2 adds the push cron here:
+	// ,"triggers": { "crons": ["*/30 * * * *"] }
+}

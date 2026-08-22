@@ -1,0 +1,16 @@
+{
+  "name": "worker",
+  "version": "1.0.0",
+  "description": "Step 1 of `PLAN_V2.md`. A single KV key mirrors Grid's `localStorage` blob so the Scriptable widget and the push cron have something to read. The app never waits on it — if this is down, Grid works exactly as it does today.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "wrangler": "^4.119.0"
+  }
+}
