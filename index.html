@@ -395,39 +395,57 @@ async function enableReminders(){
   const token = syncToken();
   if(!token){ toast("Turn on Sync first"); return; }
   if(!("serviceWorker" in navigator) || !("PushManager" in window)){ toast("Push not supported here"); return; }
+  // iOS only allows push for a home-screen app. In a plain Safari tab the
+  // subscribe call fails in ways that don't explain themselves.
+  const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  if(!standalone){ toast("Open Grid from the home screen first"); return; }
   const perm = await Notification.requestPermission();
   if(perm !== "granted"){ toast("Notifications blocked"); return; }
+  let step = "start";
   try{
     // Without a timeout this hangs forever if the worker never activates,
     // and the button just appears dead.
+    step = "sw";
     const reg = await Promise.race([
       navigator.serviceWorker.ready,
-      new Promise((_,rej)=>setTimeout(()=>rej(new Error("service worker not ready")), 10000))
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error("timed out")), 10000))
     ]);
+    step = "pushmanager";
+    if(!reg || !reg.pushManager) throw new Error("no pushManager");
     const key = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
 
-    // Re-adding to the home screen can leave a subscription behind. Reuse it
-    // when it matches, and drop it when it doesn't — subscribe() refuses to
-    // replace an existing subscription bound to a different key.
+    // Re-adding to the home screen can leave a subscription behind. Safari
+    // doesn't expose `options`, so a mismatch can't be detected there —
+    // reuse whatever exists and let the server sort it out, rather than
+    // unsubscribing something that was probably fine.
+    step = "getsub";
     let sub = await reg.pushManager.getSubscription();
-    if(sub && !sameKey(sub.options && sub.options.applicationServerKey, key)){
-      await sub.unsubscribe();
-      sub = null;
+    if(sub){
+      const known = sub.options && sub.options.applicationServerKey;
+      if(known && !sameKey(known, key)){
+        step = "unsubscribe";
+        await sub.unsubscribe();
+        sub = null;
+      }
     }
     if(!sub){
+      step = "subscribe";
       sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:key });
     }
 
+    step = "send";
     const res = await fetch(SYNC_URL+"/subscribe", {
       method:"PUT",
       headers:{ "content-type":"application/json", "authorization":"Bearer "+token },
       body: JSON.stringify(sub)
     });
-    if(!res.ok) throw new Error("worker said "+res.status);
+    if(!res.ok) throw new Error("worker "+res.status);
     toast("Reminders on");
   }catch(e){
-    // Say which step failed — "couldn't enable reminders" hid the reason.
-    toast((e && (e.message || e.name)) || "couldn't enable reminders");
+    // Name the step as well as the error — a bare "TypeError" says nothing
+    // about which call produced it.
+    const what = (e && (e.message || e.name)) || "failed";
+    toast(step+": "+what);
   }
 }
 
