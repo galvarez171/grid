@@ -398,19 +398,45 @@ async function enableReminders(){
   const perm = await Notification.requestPermission();
   if(perm !== "granted"){ toast("Notifications blocked"); return; }
   try{
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-    });
+    // Without a timeout this hangs forever if the worker never activates,
+    // and the button just appears dead.
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error("service worker not ready")), 10000))
+    ]);
+    const key = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+
+    // Re-adding to the home screen can leave a subscription behind. Reuse it
+    // when it matches, and drop it when it doesn't — subscribe() refuses to
+    // replace an existing subscription bound to a different key.
+    let sub = await reg.pushManager.getSubscription();
+    if(sub && !sameKey(sub.options && sub.options.applicationServerKey, key)){
+      await sub.unsubscribe();
+      sub = null;
+    }
+    if(!sub){
+      sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:key });
+    }
+
     const res = await fetch(SYNC_URL+"/subscribe", {
       method:"PUT",
       headers:{ "content-type":"application/json", "authorization":"Bearer "+token },
       body: JSON.stringify(sub)
     });
-    if(!res.ok) throw new Error("subscribe failed");
+    if(!res.ok) throw new Error("worker said "+res.status);
     toast("Reminders on");
-  }catch(e){ toast("Couldn't enable reminders"); }
+  }catch(e){
+    // Say which step failed — "couldn't enable reminders" hid the reason.
+    toast((e && (e.message || e.name)) || "couldn't enable reminders");
+  }
+}
+
+function sameKey(a, key){
+  if(!a) return false;
+  const cur = new Uint8Array(a);
+  if(cur.length !== key.length) return false;
+  for(let i=0;i<key.length;i++) if(cur[i] !== key[i]) return false;
+  return true;
 }
 
 /* ============ dates (all local, no UTC drift) ============ */
