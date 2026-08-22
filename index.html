@@ -369,7 +369,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v8";
+const APP_VERSION = "v9";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -454,8 +454,9 @@ async function enableReminders(){
       "step: "+step,
       "error: "+((e && e.name) || "?")+" — "+((e && e.message) || "(no message)"),
       "standalone: "+standalone,
-      "online: "+navigator.onLine,
       "sw controller: "+(!!navigator.serviceWorker.controller),
+      "",
+      await connectivityReport(),
       "endpoint: "+SYNC_URL
     ].join("\n");
     toast(step+": "+((e && (e.message || e.name)) || "failed"));
@@ -765,9 +766,29 @@ $("#btnSync").onclick = async ()=>{
     });
     toast(put.ok ? "Sync on" : "Sync: worker "+put.status);
   }catch(e){
-    toast("Sync: "+((e && (e.message || e.name)) || "unreachable"));
+    const err = (e && (e.message || e.name)) || "unreachable";
+    toast("Sync: "+err);
+    alert("Grid "+APP_VERSION+"\nsync failed: "+err+"\n\n"+(await connectivityReport())+"\nendpoint: "+SYNC_URL);
   }
 };
+
+/* Hitting the app's own origin alongside the Worker separates "this phone has
+   no network" from "this network blocks the Worker specifically" — the two
+   look identical from a single failed fetch, and guessing between them has
+   cost several rounds. */
+async function connectivityReport(){
+  const lines = ["online flag: "+navigator.onLine];
+  const base = location.href.replace(/[^/]*$/,"");
+  try{
+    const r = await fetch(base+"manifest.webmanifest?cb="+Date.now(), {cache:"no-store"});
+    lines.push("app origin: HTTP "+r.status+" (reachable)");
+  }catch(e){ lines.push("app origin: "+((e && (e.message||e.name))||"failed")); }
+  try{
+    const r = await fetch(SYNC_URL+"/health?cb="+Date.now(), {cache:"no-store"});
+    lines.push("worker /health: HTTP "+r.status+" (reachable)");
+  }catch(e){ lines.push("worker /health: "+((e && (e.message||e.name))||"failed")); }
+  return lines.join("\n");
+}
 $("#btnReminders").onclick = enableReminders;
 $("#fileIn").onchange = e => {
   const f = e.target.files[0]; if(!f) return;
