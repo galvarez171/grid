@@ -24,13 +24,14 @@ const sharp = require("../worker/node_modules/sharp");
 const ROOT = path.join(__dirname, "..");
 const SIZE = 512;
 
-// The app's five circuits, in the same order the app lists them.
-const BARS = [
-  { color: "#00B4FF", w: 280 }, // work
-  { color: "#FF2D95", w: 186 }, // cheer
-  { color: "#A855F7", w: 240 }, // classes
-  { color: "#FF8A1E", w: 132 }, // habits
-  { color: "#22E39A", w: 214 }  // personal
+// Four circuits and the wordmark, which sits where the habits bar used to be.
+// Keeping five rows preserves the original stack height and rhythm.
+const ROWS = [
+  { color: "#00B4FF", w: 280 },   // work
+  { color: "#FF2D95", w: 186 },   // cheer
+  { color: "#A855F7", w: 240 },   // classes
+  { text: "GRID", color: "#C9D6E2" },
+  { color: "#22E39A", w: 214 }    // personal
 ];
 
 const X0 = 88;         // bars start here
@@ -40,8 +41,17 @@ const RX = 9;          // slightly rounded caps, not a pill
 const NODE_R = 5.5;
 const TRACE_END = 424; // dim trace ends here, mirroring the left inset
 
+// The wordmark is set in the same monospace the app uses, tracked out to match
+// the header's wide letter-spacing. Sized to occupy roughly a bar's width so
+// the row doesn't read as a gap in the stack.
+const FONT = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace";
+const FONT_SIZE = 34;
+const TRACK = 11;                 // extra letter-spacing, in px
+// Monospace advance is ~0.6em; the last letter contributes no trailing track.
+const textWidth = t => Math.round(t.length * FONT_SIZE * 0.6 + (t.length - 1) * TRACK);
+
 // Vertically centre the whole stack.
-const stackH = BARS.length * BAR_H + (BARS.length - 1) * GAP;
+const stackH = ROWS.length * BAR_H + (ROWS.length - 1) * GAP;
 const Y0 = Math.round((SIZE - stackH) / 2);
 
 // Everything meaningful stays inside the maskable safe zone (the centre 80%,
@@ -49,23 +59,38 @@ const Y0 = Math.round((SIZE - stackH) / 2);
 function shapes(b, i) {
   const y = Y0 + i * (BAR_H + GAP);
   const cy = y + BAR_H / 2;
-  const nodeX = X0 + b.w + 20;
+  const w = b.text ? textWidth(b.text) : b.w;
+  const nodeX = X0 + w + 20;
+  // No dominant-baseline here: support for it is patchy across SVG
+  // rasterisers, so the baseline is offset by hand instead.
+  const lit = b.text
+    // Nudged left by the glyph's side bearing so the wordmark optically
+    // aligns with the bars' left edge rather than sitting a hair inside it.
+    ? `<text x="${X0 - 3}" y="${cy + FONT_SIZE * 0.35}" font-family="${FONT}" font-size="${FONT_SIZE}" font-weight="600" letter-spacing="${TRACK}" fill="${b.color}">${b.text}</text>` +
+      `<circle cx="${nodeX}" cy="${cy}" r="${NODE_R}" fill="${b.color}"/>`
+    : `<rect x="${X0}" y="${y}" width="${b.w}" height="${BAR_H}" rx="${RX}" fill="${b.color}"/>` +
+      `<circle cx="${nodeX}" cy="${cy}" r="${NODE_R}" fill="${b.color}"/>`;
   return {
-    lit: `<rect x="${X0}" y="${y}" width="${b.w}" height="${BAR_H}" rx="${RX}" fill="${b.color}"/>` +
-         `<circle cx="${nodeX}" cy="${cy}" r="${NODE_R}" fill="${b.color}"/>`,
+    lit,
+    isText: !!b.text,
     trace: `<line x1="${nodeX + 14}" y1="${cy}" x2="${TRACE_END}" y2="${cy}" stroke="#1E2C3A" stroke-width="3" stroke-linecap="round"/>`
   };
 }
 
-const body = BARS.map((b, i) => {
+const body = ROWS.map((b, i) => {
   const s = shapes(b, i);
   // Two blur passes: a wide, faint halo and a tighter brighter one, then the
   // crisp shape on top. The single hard glow before this bloomed too evenly
   // and lost the edge of the bar.
-  return `  <g>
-    <g filter="url(#wide)" opacity=".60">${s.lit}</g>
+  // Letterforms are thin, so the full three-pass bloom that flatters a solid
+  // bar just smears them. The wordmark gets one restrained halo instead.
+  const glow = s.isText
+    ? `<g filter="url(#wide)" opacity=".22">${s.lit}</g>`
+    : `<g filter="url(#wide)" opacity=".60">${s.lit}</g>
     <g filter="url(#wide)" opacity=".35">${s.lit}</g>
-    <g filter="url(#tight)" opacity=".90">${s.lit}</g>
+    <g filter="url(#tight)" opacity=".90">${s.lit}</g>`;
+  return `  <g>
+    ${glow}
     ${s.trace}
     ${s.lit}
   </g>`;

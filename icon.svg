@@ -34,11 +34,9 @@
     <rect x="88" y="239" width="240" height="34" rx="9" fill="#A855F7"/><circle cx="348" cy="256" r="5.5" fill="#A855F7"/>
   </g>
   <g>
-    <g filter="url(#wide)" opacity=".60"><rect x="88" y="299" width="132" height="34" rx="9" fill="#FF8A1E"/><circle cx="240" cy="316" r="5.5" fill="#FF8A1E"/></g>
-    <g filter="url(#wide)" opacity=".35"><rect x="88" y="299" width="132" height="34" rx="9" fill="#FF8A1E"/><circle cx="240" cy="316" r="5.5" fill="#FF8A1E"/></g>
-    <g filter="url(#tight)" opacity=".90"><rect x="88" y="299" width="132" height="34" rx="9" fill="#FF8A1E"/><circle cx="240" cy="316" r="5.5" fill="#FF8A1E"/></g>
-    <line x1="254" y1="316" x2="424" y2="316" stroke="#1E2C3A" stroke-width="3" stroke-linecap="round"/>
-    <rect x="88" y="299" width="132" height="34" rx="9" fill="#FF8A1E"/><circle cx="240" cy="316" r="5.5" fill="#FF8A1E"/>
+    <g filter="url(#wide)" opacity=".22"><text x="85" y="327.9" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="34" font-weight="600" letter-spacing="11" fill="#C9D6E2">GRID</text><circle cx="223" cy="316" r="5.5" fill="#C9D6E2"/></g>
+    <line x1="237" y1="316" x2="424" y2="316" stroke="#1E2C3A" stroke-width="3" stroke-linecap="round"/>
+    <text x="85" y="327.9" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="34" font-weight="600" letter-spacing="11" fill="#C9D6E2">GRID</text><circle cx="223" cy="316" r="5.5" fill="#C9D6E2"/>
   </g>
   <g>
     <g filter="url(#wide)" opacity=".60"><rect x="88" y="359" width="214" height="34" rx="9" fill="#22E39A"/><circle cx="322" cy="376" r="5.5" fill="#22E39A"/></g>
