@@ -369,7 +369,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v10";
+const APP_VERSION = "v11";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -747,8 +747,12 @@ $("#btnSync").onclick = async ()=>{
   const cur = syncToken();
   const entered = prompt(cur ? "Sync is on. Paste a new token to replace it, or Cancel to leave it." : "Paste Grid sync token to turn sync on:", "");
   if(entered === null) return;
-  const trimmed = entered.trim();
+  // The token is base64url, so anything outside that alphabet came from the
+  // paste, not the token — a stray space or smart character is invisible here
+  // but makes fetch throw before it ever reaches the network.
+  const trimmed = entered.replace(/[^A-Za-z0-9_-]/g, "");
   if(!trimmed) return;
+  if(trimmed !== entered.trim()) toast("Cleaned "+(entered.trim().length-trimmed.length)+" stray char(s)");
   localStorage.setItem(TOKEN_KEY, trimmed);
   // Actually prove the round trip. Saying "sync enabled" the moment a token
   // is stored claimed success for a token and a network that had never been
@@ -792,6 +796,19 @@ async function connectivityReport(){
   // bare GET doesn't. Comparing the two separates a genuine network problem
   // from a rejected — or staler — preflight, which look the same otherwise.
   const tok = syncToken();
+
+  // A header value carrying a stray character Safari can't encode makes fetch
+  // throw TypeError before anything hits the network — indistinguishable from
+  // a connection failure unless the header is built on its own.
+  const raw = tok == null ? "" : String(tok);
+  const bad = raw.replace(/[A-Za-z0-9_-]/g, "");
+  lines.push("token: "+raw.length+" chars"+(bad ? ", "+bad.length+" unexpected: "+
+    [...bad].map(c=>"U+"+c.codePointAt(0).toString(16).toUpperCase().padStart(4,"0")).join(" ") : ", charset ok"));
+  try{
+    new Headers({ authorization:"Bearer "+raw });
+    lines.push("header build: ok");
+  }catch(e){ lines.push("header build: FAILS — "+((e && (e.message||e.name))||"?")); }
+
   try{
     const r = await fetch(SYNC_URL+"/state", {cache:"no-store"});
     lines.push("/state no auth: HTTP "+r.status+" (expect 401)");
