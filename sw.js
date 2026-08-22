@@ -1,5 +1,5 @@
 // Grid — offline shell. Bump CACHE on every deploy or phones keep the old app.
-const CACHE = "grid-v1";
+const CACHE = "grid-v2";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-180.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -25,5 +25,25 @@ self.addEventListener("fetch", e => {
         return res;
       })
       .catch(() => caches.match(e.request).then(r => r || caches.match("./index.html")))
+  );
+});
+
+self.addEventListener("push", e => {
+  let data = { title: "Grid", body: "" };
+  try{ data = e.data.json(); }catch(err){}
+  e.waitUntil(self.registration.showNotification(data.title || "Grid", {
+    body: data.body || "",
+    icon: "./icon-180.png",
+    badge: "./icon-180.png"
+  }));
+});
+
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: "window" }).then(clients => {
+      for(const c of clients){ if("focus" in c) return c.focus(); }
+      return self.clients.openWindow("./index.html");
+    })
   );
 });

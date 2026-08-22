@@ -6,11 +6,17 @@ on it — if this is down, Grid works exactly as it does today.
 
 ## Endpoints
 
-| Method | Path      | Auth   | Does |
-|--------|-----------|--------|------|
-| GET    | `/health` | none   | liveness check |
-| GET    | `/state`  | bearer | returns `{v,updatedAt,state}`; `state:null` before first sync |
-| PUT    | `/state`  | bearer | body is the raw Grid state JSON; wraps it with `updatedAt` |
+| Method | Path         | Auth   | Does |
+|--------|--------------|--------|------|
+| GET    | `/health`    | none   | liveness check |
+| GET    | `/state`     | bearer | returns `{v,updatedAt,state}`; `state:null` before first sync |
+| PUT    | `/state`     | bearer | body is the raw Grid state JSON; wraps it with `updatedAt` |
+| PUT    | `/subscribe` | bearer | body is a `PushSubscription` from `PushManager.subscribe()`; stores it (single device) |
+| DELETE | `/subscribe` | bearer | clears the stored subscription |
+| POST   | `/push/test` | bearer | sends one test push to the stored subscription |
+
+A `scheduled` cron (`*/30 * * * *`) checks the evening habit nag once `TIMEZONE`
+(an IANA name, e.g. `America/Denver`) is set as a var — without it, it no-ops.
 
 Auth header: `Authorization: Bearer <GRID_TOKEN>`. Anything else is `401`.
 The body must be a JSON object — arrays, scalars and `null` are rejected `400`

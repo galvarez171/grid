@@ -13,7 +13,13 @@
 	// Set to the GitHub Pages origin Grid is served from (no trailing slash).
 	// Comma-separated if a second origin is ever added.
 	"vars": {
-		"ALLOWED_ORIGIN": "https://galvarez171.github.io"
+		"ALLOWED_ORIGIN": "https://galvarez171.github.io",
+		// Raw uncompressed P-256 public key, base64url — same value goes in the
+		// app as the PushManager.subscribe() applicationServerKey. Not secret.
+		"VAPID_PUBLIC_KEY": "BPirvr7mJvbF3jy-S0znrnX9fkiv_ejnj0AhXn150GDYI3Gv9cbMZq95k8w5ZSsVvdBt9-14k_iXynEQg0IDhe8",
+		// Push services want a contact URI in case they need to reach the sender.
+		"VAPID_SUBJECT": "mailto:gabealvarez1@icloud.com",
+		"TIMEZONE": "America/Chicago"
 	},
 	// No "id" on purpose: wrangler provisions the namespace on first deploy and
 	// writes the id back here. GRID_TOKEN is a secret, set with `wrangler secret
@@ -23,7 +29,6 @@
 			"binding": "GRID_KV",
 			"id": "32aec2d481754f109643f7cd65273c2a"
 		}
-	]
-	// Step 4 of PLAN_V2 adds the push cron here:
-	// ,"triggers": { "crons": ["*/30 * * * *"] }
+	],
+	"triggers": { "crons": ["*/30 * * * *"] }
 }

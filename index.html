@@ -265,6 +265,7 @@ footer button{
     <button id="btnExport">Export backup</button>
     <button id="btnImport">Import</button>
     <button id="btnSync">Sync</button>
+    <button id="btnReminders">Reminders</button>
   </footer>
 </div>
 
@@ -341,6 +342,34 @@ function pushSync(immediate){
 document.addEventListener("visibilitychange", ()=>{
   if(document.visibilityState === "hidden") pushSync(true);
 });
+
+/* ============ push notifications (step 3) ============ */
+const VAPID_PUBLIC_KEY = "BPirvr7mJvbF3jy-S0znrnX9fkiv_ejnj0AhXn150GDYI3Gv9cbMZq95k8w5ZSsVvdBt9-14k_iXynEQg0IDhe8";
+function urlBase64ToUint8Array(b64url){
+  const bin = atob(b64url.replace(/-/g,"+").replace(/_/g,"/"));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+async function enableReminders(){
+  const token = syncToken();
+  if(!token){ toast("Turn on Sync first"); return; }
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)){ toast("Push not supported here"); return; }
+  const perm = await Notification.requestPermission();
+  if(perm !== "granted"){ toast("Notifications blocked"); return; }
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+    const res = await fetch(SYNC_URL+"/subscribe", {
+      method:"PUT",
+      headers:{ "content-type":"application/json", "authorization":"Bearer "+token },
+      body: JSON.stringify(sub)
+    });
+    if(!res.ok) throw new Error("subscribe failed");
+    toast("Reminders on");
+  }catch(e){ toast("Couldn't enable reminders"); }
+}
 
 /* ============ dates (all local, no UTC drift) ============ */
 const pad = n => String(n).padStart(2,"0");
@@ -604,6 +633,7 @@ $("#btnSync").onclick = ()=>{
   toast("Sync enabled");
   pushSync(true);
 };
+$("#btnReminders").onclick = enableReminders;
 $("#fileIn").onchange = e => {
   const f = e.target.files[0]; if(!f) return;
   const r = new FileReader();
