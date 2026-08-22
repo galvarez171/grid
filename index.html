@@ -366,6 +366,10 @@ function save(){
 
 /* ============ worker sync (mirror only — localStorage stays truth) ============ */
 const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
+// Shown in the header. Bump alongside the service worker's CACHE so it's
+// always possible to tell at a glance which build a phone is actually
+// running — a cached shell otherwise looks identical to a fresh one.
+const APP_VERSION = "v8";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -442,10 +446,20 @@ async function enableReminders(){
     if(!res.ok) throw new Error("worker "+res.status);
     toast("Reminders on");
   }catch(e){
-    // Name the step as well as the error — a bare "TypeError" says nothing
-    // about which call produced it.
-    const what = (e && (e.message || e.name)) || "failed";
-    toast(step+": "+what);
+    // A toast is too small and too uppercase to carry a real diagnosis, and
+    // guessing from "TypeError" alone has cost several round trips. Dump the
+    // whole picture where it can actually be read.
+    const detail = [
+      "Grid "+APP_VERSION,
+      "step: "+step,
+      "error: "+((e && e.name) || "?")+" — "+((e && e.message) || "(no message)"),
+      "standalone: "+standalone,
+      "online: "+navigator.onLine,
+      "sw controller: "+(!!navigator.serviceWorker.controller),
+      "endpoint: "+SYNC_URL
+    ].join("\n");
+    toast(step+": "+((e && (e.message || e.name)) || "failed"));
+    alert(detail);
   }
 }
 
@@ -512,7 +526,7 @@ function render(){ renderHeader(); renderHabits(); renderCheer(); renderCal(); r
 function renderHeader(){
   const t = today();
   const dow = t.toLocaleDateString(undefined,{weekday:"long"});
-  $("#hdrsub").innerHTML = dow+"<br>"+MON[t.getMonth()].slice(0,3)+" "+t.getDate()+" "+t.getFullYear();
+  $("#hdrsub").innerHTML = dow+"<br>"+MON[t.getMonth()].slice(0,3)+" "+t.getDate()+" "+t.getFullYear()+"<br>"+APP_VERSION;
 }
 
 function renderHabits(){
