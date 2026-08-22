@@ -51,8 +51,13 @@ async function loadState() {
   const req = new Request(SYNC_URL + "/state");
   req.headers = { Authorization: "Bearer " + TOKEN };
   req.timeoutInterval = 10;
-  const res = await req.loadJSON();
-  return res?.state || null;
+  const body = await req.loadJSON();
+  // A rejected request still parses as JSON ({"error":"unauthorized"}), so
+  // without checking the status a bad token looks identical to "no data yet".
+  const code = req.response?.statusCode;
+  if (code === 401) throw new Error("BAD TOKEN");
+  if (code && code >= 400) throw new Error("HTTP " + code);
+  return body?.state ?? null;
 }
 
 /* ---------- draw ---------- */
@@ -77,10 +82,15 @@ function build(state, error) {
   w.addSpacer(6);
 
   if (error || !state) {
-    const msg = w.addText(error ? "OFFLINE" : "NO DATA YET");
+    const bad = error && /BAD TOKEN|token not set/.test(error.message);
+    const msg = w.addText(error ? (bad ? "BAD TOKEN" : "OFFLINE") : "NO DATA YET");
     msg.font = Font.regularMonospacedSystemFont(11);
     msg.textColor = new Color(DIM);
-    const hint = w.addText(error ? "check token / network" : "open Grid to sync");
+    const hint = w.addText(
+      bad ? "re-paste token in script"
+        : error ? String(error.message).slice(0, 24)
+          : "open Grid to sync"
+    );
     hint.font = Font.regularMonospacedSystemFont(9);
     hint.textColor = new Color(DIM);
     return w;
