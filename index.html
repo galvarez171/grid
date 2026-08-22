@@ -177,6 +177,16 @@ footer button{
   padding:10px 4px;cursor:pointer;
 }
 
+/* ---------- sync token field ---------- */
+#syncInput{
+  width:100%;background:#04070B;border:1px solid var(--line2);color:var(--txt);
+  font:400 13px/1.3 ui-monospace,Menlo,Consolas,monospace;
+  padding:11px;outline:none;-webkit-user-select:text;user-select:text;
+  border-radius:0;-webkit-appearance:none;
+}
+#syncInput:focus{border-color:var(--personal);box-shadow:0 0 0 1px rgba(34,227,154,.25)}
+#syncInput::placeholder{color:var(--dimmer)}
+
 /* ---------- motion ----------
    No haptics anywhere in here on purpose: Safari on iOS has never shipped the
    Vibration API, so the "logged" moment has to land visually. */
@@ -303,6 +313,21 @@ body::before{animation:drift 7s linear infinite}
     </div>
   </section>
 
+  <!-- A real field rather than prompt(), which offers no way to switch off
+       autocapitalisation — it silently uppercased the token's first letter. -->
+  <section class="panel" id="syncPanel" hidden>
+    <div class="phead" style="--c:var(--personal)"><i class="tick"></i><h2>Sync token</h2></div>
+    <div class="pbody">
+      <input id="syncInput" type="text" inputmode="verbatim" autocapitalize="off"
+             autocorrect="off" autocomplete="off" spellcheck="false" placeholder="paste token">
+      <div class="hint" id="syncHint" style="margin-top:8px"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" id="syncSave" style="--c:var(--personal)">Save</button>
+        <button class="btn" id="syncCancel">Cancel</button>
+      </div>
+    </div>
+  </section>
+
   <footer>
     <button id="btnExport">Export backup</button>
     <button id="btnImport">Import</button>
@@ -369,7 +394,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -743,38 +768,64 @@ $("#btnExport").onclick = ()=>{
   toast("Backup exported");
 };
 $("#btnImport").onclick = ()=> $("#fileIn").click();
-$("#btnSync").onclick = async ()=>{
-  const cur = syncToken();
-  const entered = prompt(cur ? "Sync is on. Paste a new token to replace it, or Cancel to leave it." : "Paste Grid sync token to turn sync on:", "");
-  if(entered === null) return;
-  // The token is base64url, so anything outside that alphabet came from the
-  // paste, not the token — a stray space or smart character is invisible here
-  // but makes fetch throw before it ever reaches the network.
-  const trimmed = entered.replace(/[^A-Za-z0-9_-]/g, "");
-  if(!trimmed) return;
-  if(trimmed !== entered.trim()) toast("Cleaned "+(entered.trim().length-trimmed.length)+" stray char(s)");
-  localStorage.setItem(TOKEN_KEY, trimmed);
-  // Actually prove the round trip. Saying "sync enabled" the moment a token
-  // is stored claimed success for a token and a network that had never been
-  // tried — the background push swallows its own errors, so a total failure
-  // to reach the Worker looked identical to working.
+function syncHint(){
+  const t = syncToken();
+  $("#syncHint").textContent = t
+    ? "Stored: "+t.length+" chars, "+t.slice(0,4)+"…"+t.slice(-4)+" (expect 43)"
+    : "Expect 43 characters: letters, digits, _ and -";
+}
+$("#btnSync").onclick = ()=>{
+  const p = $("#syncPanel");
+  p.hidden = !p.hidden;
+  if(!p.hidden){
+    $("#syncInput").value = "";
+    syncHint();
+    p.scrollIntoView({block:"center"});
+    $("#syncInput").focus();
+  }
+};
+$("#syncCancel").onclick = ()=>{ $("#syncPanel").hidden = true; };
+$("#syncSave").onclick = async ()=>{
+  const entered = $("#syncInput").value;
+  // The token is base64url, so anything outside that alphabet arrived with the
+  // paste. A stray space or smart character is invisible in the field but makes
+  // fetch throw before it ever reaches the network.
+  const cleaned = entered.replace(/[^A-Za-z0-9_-]/g, "");
+  if(!cleaned){ toast("Enter a token"); return; }
+  localStorage.setItem(TOKEN_KEY, cleaned);
+  syncHint();
+  await verifySync(cleaned);
+};
+
+// Prove the round trip rather than assuming it. Reporting success the moment a
+// token is stored claimed success for a token and a network that had never
+// been tried, and the background push swallows its own errors — so a total
+// failure to reach the Worker looked identical to working.
+async function verifySync(token){
   toast("Checking sync");
   try{
-    const res = await fetch(SYNC_URL+"/state", { headers:{ authorization:"Bearer "+trimmed } });
-    if(res.status === 401){ toast("Sync: bad token"); return; }
+    const res = await fetch(SYNC_URL+"/state", { headers:{ authorization:"Bearer "+token } });
+    if(res.status === 401){
+      toast("Sync: bad token");
+      alert("Grid "+APP_VERSION+"\nThe Worker rejected this token.\n\nSent "+token.length+
+            " chars: "+token.slice(0,6)+"…"+token.slice(-6)+
+            "\nExpected 43. Check for a capitalised first letter — iOS likes to do that.");
+      return;
+    }
     if(!res.ok){ toast("Sync: worker "+res.status); return; }
     const put = await fetch(SYNC_URL+"/state", {
       method:"PUT",
-      headers:{ "content-type":"application/json", authorization:"Bearer "+trimmed },
+      headers:{ "content-type":"application/json", authorization:"Bearer "+token },
       body: JSON.stringify(S)
     });
-    toast(put.ok ? "Sync on" : "Sync: worker "+put.status);
+    if(put.ok){ toast("Sync on"); $("#syncPanel").hidden = true; }
+    else toast("Sync: worker "+put.status);
   }catch(e){
     const err = (e && (e.message || e.name)) || "unreachable";
     toast("Sync: "+err);
     alert("Grid "+APP_VERSION+"\nsync failed: "+err+"\n\n"+(await connectivityReport())+"\nendpoint: "+SYNC_URL);
   }
-};
+}
 
 /* Hitting the app's own origin alongside the Worker separates "this phone has
    no network" from "this network blocks the Worker specifically" — the two
