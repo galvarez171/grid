@@ -204,7 +204,7 @@ function cors(origin) {
     "access-control-allow-origin": origin,
     "access-control-allow-methods": "GET,PUT,POST,DELETE,OPTIONS",
     "access-control-allow-headers": "authorization,content-type",
-    "access-control-max-age": "86400",
+    "access-control-max-age": "600",
     "vary": "Origin"
   };
 }

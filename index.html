@@ -369,7 +369,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v9";
+const APP_VERSION = "v10";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -787,6 +787,25 @@ async function connectivityReport(){
     const r = await fetch(SYNC_URL+"/health?cb="+Date.now(), {cache:"no-store"});
     lines.push("worker /health: HTTP "+r.status+" (reachable)");
   }catch(e){ lines.push("worker /health: "+((e && (e.message||e.name))||"failed")); }
+
+  // An Authorization header makes the browser preflight the request, while a
+  // bare GET doesn't. Comparing the two separates a genuine network problem
+  // from a rejected — or staler — preflight, which look the same otherwise.
+  const tok = syncToken();
+  try{
+    const r = await fetch(SYNC_URL+"/state", {cache:"no-store"});
+    lines.push("/state no auth: HTTP "+r.status+" (expect 401)");
+  }catch(e){ lines.push("/state no auth: "+((e && (e.message||e.name))||"failed")); }
+  try{
+    const r = await fetch(SYNC_URL+"/state", {cache:"no-store", headers:{ authorization:"Bearer "+tok }});
+    lines.push("/state auth: HTTP "+r.status);
+  }catch(e){ lines.push("/state auth: "+((e && (e.message||e.name))||"failed")); }
+  // A unique URL can't hit a cached preflight, so if only this one succeeds
+  // the old cached entry is the culprit.
+  try{
+    const r = await fetch(SYNC_URL+"/state?cb="+Date.now(), {cache:"no-store", headers:{ authorization:"Bearer "+tok }});
+    lines.push("/state auth fresh url: HTTP "+r.status);
+  }catch(e){ lines.push("/state auth fresh url: "+((e && (e.message||e.name))||"failed")); }
   return lines.join("\n");
 }
 $("#btnReminders").onclick = enableReminders;
