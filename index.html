@@ -728,15 +728,31 @@ $("#btnExport").onclick = ()=>{
   toast("Backup exported");
 };
 $("#btnImport").onclick = ()=> $("#fileIn").click();
-$("#btnSync").onclick = ()=>{
+$("#btnSync").onclick = async ()=>{
   const cur = syncToken();
   const entered = prompt(cur ? "Sync is on. Paste a new token to replace it, or Cancel to leave it." : "Paste Grid sync token to turn sync on:", "");
   if(entered === null) return;
   const trimmed = entered.trim();
   if(!trimmed) return;
   localStorage.setItem(TOKEN_KEY, trimmed);
-  toast("Sync enabled");
-  pushSync(true);
+  // Actually prove the round trip. Saying "sync enabled" the moment a token
+  // is stored claimed success for a token and a network that had never been
+  // tried — the background push swallows its own errors, so a total failure
+  // to reach the Worker looked identical to working.
+  toast("Checking sync");
+  try{
+    const res = await fetch(SYNC_URL+"/state", { headers:{ authorization:"Bearer "+trimmed } });
+    if(res.status === 401){ toast("Sync: bad token"); return; }
+    if(!res.ok){ toast("Sync: worker "+res.status); return; }
+    const put = await fetch(SYNC_URL+"/state", {
+      method:"PUT",
+      headers:{ "content-type":"application/json", authorization:"Bearer "+trimmed },
+      body: JSON.stringify(S)
+    });
+    toast(put.ok ? "Sync on" : "Sync: worker "+put.status);
+  }catch(e){
+    toast("Sync: "+((e && (e.message || e.name)) || "unreachable"));
+  }
 };
 $("#btnReminders").onclick = enableReminders;
 $("#fileIn").onchange = e => {
