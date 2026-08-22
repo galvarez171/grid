@@ -394,7 +394,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -768,12 +768,23 @@ $("#btnExport").onclick = ()=>{
   toast("Backup exported");
 };
 $("#btnImport").onclick = ()=> $("#fileIn").click();
+const TOKEN_LEN = 24;
 function syncHint(){
   const t = syncToken();
   $("#syncHint").textContent = t
-    ? "Stored: "+t.length+" chars, "+t.slice(0,4)+"…"+t.slice(-4)+" (expect 43)"
-    : "Expect 43 characters: letters, digits, _ and -";
+    ? "Stored: "+t.length+" chars, "+t.slice(0,3)+"…"+t.slice(-3)+" (expect "+TOKEN_LEN+")"
+    : "Expect "+TOKEN_LEN+" characters: letters, digits, _ and -";
+  $("#syncHint").style.color = "";
 }
+// Counts as you paste. A truncated copy is otherwise invisible until the
+// Worker rejects it, which reads as a broken app rather than a short paste.
+$("#syncInput").addEventListener("input", ()=>{
+  const n = $("#syncInput").value.replace(/[^A-Za-z0-9_-]/g, "").length;
+  if(!n){ syncHint(); return; }
+  const ok = n === TOKEN_LEN;
+  $("#syncHint").textContent = n+" / "+TOKEN_LEN+(ok ? " — looks right" : n < TOKEN_LEN ? " — too short, copy again" : " — too long");
+  $("#syncHint").style.color = ok ? "var(--personal)" : "var(--cheer)";
+});
 $("#btnSync").onclick = ()=>{
   const p = $("#syncPanel");
   p.hidden = !p.hidden;
@@ -808,8 +819,10 @@ async function verifySync(token){
     if(res.status === 401){
       toast("Sync: bad token");
       alert("Grid "+APP_VERSION+"\nThe Worker rejected this token.\n\nSent "+token.length+
-            " chars: "+token.slice(0,6)+"…"+token.slice(-6)+
-            "\nExpected 43. Check for a capitalised first letter — iOS likes to do that.");
+            " chars: "+token.slice(0,4)+"…"+token.slice(-4)+
+            "\nExpected "+TOKEN_LEN+"."+(token.length !== TOKEN_LEN
+              ? " The copy was incomplete — select the whole token and paste again."
+              : " Right length, wrong value — check the first letter's case."));
       return;
     }
     if(!res.ok){ toast("Sync: worker "+res.status); return; }
