@@ -1,10 +1,10 @@
 {
   "name": "worker",
   "version": "1.0.0",
-  "description": "Step 1 of `PLAN_V2.md`. A single KV key mirrors Grid's `localStorage` blob so the Scriptable widget and the push cron have something to read. The app never waits on it — if this is down, Grid works exactly as it does today.",
+  "description": "Steps 1-4 of PLAN_V2.md. Mirrors Grid localStorage state in KV and sends the push notifications.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/triggers.test.mjs test/widget-parity.test.mjs"
   },
   "keywords": [],
   "author": "",

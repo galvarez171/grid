@@ -5,15 +5,16 @@
  * truth; this is a mirror. If this Worker is down the app must keep working.
  *
  * "subscription" holds the one PushSubscription (single-user, one device).
- * "lastNag" holds the ymd string of the last evening-nag push sent, so the
- * every-30-min cron doesn't re-fire inside the same day.
+ * "sent" maps each trigger key to the ymd it last fired on, so the every-30-min
+ * cron doesn't re-fire the same notification all evening.
  */
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
+import { localParts, decideNotifications } from "./triggers.mjs";
 
 const KV_KEY = "state";
 const SUB_KEY = "subscription";
-const NAG_KEY = "lastNag";
+const SENT_KEY = "sent";
 const MAX_BODY = 200 * 1024; // KV allows 25MB; Grid's blob is a few KB. Anything
                              // bigger than this is a bug, not a real state.
 
@@ -96,61 +97,71 @@ export default {
 
 /* ---------- push triggers (step 4) ---------- */
 
-// Requires env.TIMEZONE (IANA name, e.g. "America/Denver") — without it the
+// Requires env.TIMEZONE (IANA name, e.g. "America/Chicago") — without it the
 // cron can't know what "8pm" means for the user, so it no-ops rather than
 // guess and fire at the wrong hour.
 async function runTriggers(env) {
   if (!env.TIMEZONE) return;
 
-  const now = new Date();
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: env.TIMEZONE, hour12: false,
-      year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit"
-    }).formatToParts(now).map(p => [p.type, p.value])
-  );
-  const todayYmd = `${parts.year}-${parts.month}-${parts.day}`;
-  const hour = Number(parts.hour) % 24;
+  const parts = localParts(new Date(), env.TIMEZONE);
+  // Nothing can fire before 9am local; skip the KV reads entirely overnight.
+  if (parts.hour < 9) return;
 
-  // Trigger 1: evening habit nag, ~8pm local, once per day.
-  if (hour >= 20) {
-    const lastNag = await env.GRID_KV.get(NAG_KEY);
-    if (lastNag !== todayYmd) {
-      const raw = await env.GRID_KV.get(KV_KEY);
-      const state = raw ? JSON.parse(raw).state : null;
-      if (state && habitsUndoneToday(state, todayYmd)) {
-        await sendPush(env, { title: "Grid", body: "Still time to log today's habits." });
-      }
-      await env.GRID_KV.put(NAG_KEY, todayYmd);
+  // Read all three at once, and bail before any decision work if there's
+  // nobody to notify — one KV round trip per tick, per plan §6.
+  const [stateRaw, sentRaw, subRaw] = await Promise.all([
+    env.GRID_KV.get(KV_KEY),
+    env.GRID_KV.get(SENT_KEY),
+    env.GRID_KV.get(SUB_KEY)
+  ]);
+  if (!subRaw) return;
+  const state = stateRaw ? JSON.parse(stateRaw).state : null;
+  const sent = sentRaw ? JSON.parse(sentRaw) : {};
+  const subscription = JSON.parse(subRaw);
+
+  const due = decideNotifications(state, parts, sent);
+  if (!due.length) return;
+
+  let changed = false;
+  for (const n of due) {
+    let res;
+    try {
+      res = await sendPush(env, { title: n.title, body: n.body }, subscription);
+    } catch {
+      // A thrown fetch (DNS/network) must not abort the remaining
+      // notifications or lose the `sent` write below. Next tick retries.
+      continue;
     }
+    // Only mark it sent once it actually went out, so a transient push-service
+    // failure retries on the next tick instead of silently eating the day's
+    // notification.
+    if (res.ok) { sent[n.key] = n.ymd; changed = true; }
+    // The subscription is gone (phone re-added to the home screen, etc.) —
+    // sendPush has already cleared it, so don't retry the rest against a
+    // dead endpoint.
+    if (res.status === 404 || res.status === 410) break;
   }
-
-  // Triggers 2-4 (streak-at-risk, cheer-tomorrow, Sunday Reset nudge) land
-  // here once trigger 1 has proven itself for a few days — see PLAN_V2 §3.
+  if (changed) await env.GRID_KV.put(SENT_KEY, JSON.stringify(sent));
 }
 
-function habitsUndoneToday(state, todayYmd) {
-  const day = new Date(`${todayYmd}T00:00:00`).getDay();
-  return Object.values(state.habits || {}).some(h => {
-    const scheduled = !h.scheduled || h.scheduled.includes(day);
-    return scheduled && !h.dates?.[todayYmd];
-  });
-}
-
-async function sendPush(env, { title, body }) {
+// `subscription` is optional: the cron passes the one it already read, while
+// /push/test lets this fetch it.
+async function sendPush(env, { title, body }, subscription) {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_SUBJECT) {
     return { ok: false, error: "vapid not configured" };
   }
-  const raw = await env.GRID_KV.get(SUB_KEY);
-  if (!raw) return { ok: false, error: "no subscription" };
-  const subscription = JSON.parse(raw);
+  if (!subscription) {
+    const raw = await env.GRID_KV.get(SUB_KEY);
+    if (!raw) return { ok: false, error: "no subscription" };
+    subscription = JSON.parse(raw);
+  }
 
   const vapid = { subject: env.VAPID_SUBJECT, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY };
   const payload = await buildPushPayload({ data: { title, body }, options: { ttl: 3600 } }, subscription, vapid);
   const res = await fetch(subscription.endpoint, payload);
 
   // 404/410 means the push service dropped this subscription (e.g. re-added
-  // to home screen) — clear it so /push/test stops trying a dead endpoint.
+  // to home screen) — clear it so later sends stop trying a dead endpoint.
   if (res.status === 404 || res.status === 410) await env.GRID_KV.delete(SUB_KEY);
 
   return { ok: res.ok, status: res.status };
@@ -191,7 +202,7 @@ function corsOrigin(req, env) {
 function cors(origin) {
   return {
     "access-control-allow-origin": origin,
-    "access-control-allow-methods": "GET,PUT,OPTIONS",
+    "access-control-allow-methods": "GET,PUT,POST,DELETE,OPTIONS",
     "access-control-allow-headers": "authorization,content-type",
     "access-control-max-age": "86400",
     "vary": "Origin"
