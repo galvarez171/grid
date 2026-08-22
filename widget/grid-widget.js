@@ -1,154 +1,185 @@
 // Grid — Scriptable home-screen widget (PLAN_V2 step 5).
 //
-// iOS gives web apps no native widget API, so this reads the same /state blob
-// the PWA syncs up and draws it with WidgetKit. Copy this file into a new
-// Scriptable script on the phone and paste the token below.
+// Shows what's next on the Apple Calendar, in Grid's colors.
+//
+// Note on the architecture: the PWA can't read Apple Calendar — iOS gives web
+// apps no calendar access, which is why Grid only ever writes to it via the
+// Shortcuts. Scriptable is a native app, so EventKit is available here. That
+// makes this widget entirely local: no token, no network, no dependency on the
+// sync Worker (which still exists for push notifications, and is unaffected).
 //
 // This is the canonical copy; the running one lives in the Scriptable app.
-// It only ever does a single read-only GET — it never writes Grid's state.
+// Read-only — it never creates, edits, or deletes an event.
 
-// ── paste your Grid sync token here (the same one the app's Sync button took) ──
-const TOKEN = "PASTE_YOUR_TOKEN_HERE";
-const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
+const LOOKAHEAD_DAYS = 14;   // how far out to look for "next"
+const MAX_ROWS = 3;          // extra events listed under the headline (small)
 
-// Same five circuit colors as the app, so the widget reads as the same product.
-const COLORS = {
-  "--work": "#00B4FF",
-  "--cheer": "#FF2D95",
-  "--classes": "#A855F7",
-  "--habits": "#FF8A1E",
-  "--personal": "#22E39A"
-};
+// Grid's five circuit colors, matched against the calendar's name so the
+// widget reads as the same product as the app.
+const CIRCUITS = [
+  [/work|shift|job/i, "#00B4FF"],
+  [/cheer/i, "#FF2D95"],
+  [/class|school|course|lecture/i, "#A855F7"],
+  [/habit/i, "#FF8A1E"],
+  [/personal|life|home/i, "#22E39A"]
+];
 const BG = "#05070A";
 const DIM = "#5A6B7A";
-const HABIT_ORDER = ["attendance", "meditation", "learning"];
+const FALLBACK = "#22E39A";
 
-/* ---------- dates (local, mirrors the app) ---------- */
-const pad = n => String(n).padStart(2, "0");
-const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-function today() { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); }
-function parseYmd(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
-function addDays(d, n) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() + n); return x; }
+/* ---------- calendar ---------- */
 
-/* ---------- streak (mirrors currentStreak() in index.html) ---------- */
-function isScheduled(h, d) { return !h.scheduled || h.scheduled.includes(d.getDay()); }
-function currentStreak(h) {
-  let cur = today();
-  // Grace: an unlogged today doesn't break the streak, the day isn't over.
-  if (isScheduled(h, cur) && !h.dates?.[ymd(cur)]) cur = addDays(cur, -1);
-  let n = 0, guard = 0;
-  // The guard also stops a habit scheduled for no day from looping forever.
-  while (guard++ < 3660) {
-    if (!isScheduled(h, cur)) { cur = addDays(cur, -1); continue; }
-    if (h.dates?.[ymd(cur)]) { n++; cur = addDays(cur, -1); }
-    else break;
-  }
-  return n;
+// Colors an event by its calendar's name, falling back to the color the
+// calendar itself is assigned in iOS so an unrecognised one still looks right.
+function eventColor(ev) {
+  const name = ev.calendar?.title || "";
+  for (const [re, hex] of CIRCUITS) if (re.test(name)) return hex;
+  const c = ev.calendar?.color;
+  return c ? "#" + c.hex.replace(/^#/, "") : FALLBACK;
 }
 
-/* ---------- fetch ---------- */
-async function loadState() {
-  const req = new Request(SYNC_URL + "/state");
-  req.headers = { Authorization: "Bearer " + TOKEN };
-  req.timeoutInterval = 10;
-  const body = await req.loadJSON();
-  // A rejected request still parses as JSON ({"error":"unauthorized"}), so
-  // without checking the status a bad token looks identical to "no data yet".
-  const code = req.response?.statusCode;
-  if (code === 401) throw new Error("BAD TOKEN");
-  if (code && code >= 400) throw new Error("HTTP " + code);
-  return body?.state ?? null;
+async function loadEvents() {
+  const cals = await Calendar.forEvents();
+  const now = new Date();
+  const end = new Date(now.getTime() + LOOKAHEAD_DAYS * 86400000);
+  const events = await CalendarEvent.between(now, end, cals);
+  return events
+    // between() includes events already in progress; keep those (they're still
+    // "what's happening"), but drop anything that has fully ended.
+    .filter(e => (e.isAllDay ? endOfDay(e.startDate) : e.endDate) >= now)
+    .sort((a, b) => a.startDate - b.startDate);
 }
 
-/* ---------- draw ---------- */
-function row(stack, text, color, bold) {
+function endOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+}
+
+/* ---------- date formatting ---------- */
+
+const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function daysFromToday(d) {
+  return Math.round((startOfDay(d) - startOfDay(new Date())) / 86400000);
+}
+
+function fmtTime(d) {
+  const f = new DateFormatter();
+  f.dateFormat = "h:mm a";
+  return f.string(d);
+}
+function fmtWeekday(d) {
+  const f = new DateFormatter();
+  f.dateFormat = "EEE";
+  return f.string(d).toUpperCase();
+}
+function fmtDate(d) {
+  const f = new DateFormatter();
+  f.dateFormat = "MMM d";
+  return f.string(d).toUpperCase();
+}
+
+// "TODAY 4:00 PM" / "TOMORROW · ALL DAY" / "MON 9:00 AM" / "SEP 3 9:00 AM"
+function whenLabel(ev) {
+  const n = daysFromToday(ev.startDate);
+  const day = n === 0 ? "TODAY" : n === 1 ? "TOMORROW" : n < 7 ? fmtWeekday(ev.startDate) : fmtDate(ev.startDate);
+  return ev.isAllDay ? day + " · ALL DAY" : day + " " + fmtTime(ev.startDate);
+}
+
+// A short "in 25m" / "in 3h" hint, only while it's near enough to matter.
+function soonLabel(ev) {
+  if (ev.isAllDay) return "";
+  const ms = ev.startDate - new Date();
+  if (ms < 0) return "NOW";
+  if (ms > 12 * 3600000) return "";
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return "IN " + mins + "M";
+  return "IN " + Math.round(mins / 60) + "H";
+}
+
+/* ---------- drawing ---------- */
+
+function addLine(stack, text, hex, size, bold) {
   const t = stack.addText(text);
-  t.font = bold ? Font.boldMonospacedSystemFont(11) : Font.regularMonospacedSystemFont(11);
-  t.textColor = new Color(color);
+  t.font = bold ? Font.boldMonospacedSystemFont(size) : Font.regularMonospacedSystemFont(size);
+  t.textColor = new Color(hex);
   t.lineLimit = 1;
   return t;
 }
 
-function build(state, error) {
+function build(events, error) {
+  const family = config.widgetFamily || "small";
+  const wide = family === "medium" || family === "large";
   const w = new ListWidget();
   w.backgroundColor = new Color(BG);
   w.setPadding(12, 12, 12, 12);
-  // iOS decides when to actually refresh; this is a hint, not a guarantee.
-  w.refreshAfterDate = new Date(Date.now() + 30 * 60 * 1000);
 
-  const title = w.addText("GRID");
-  title.font = Font.boldMonospacedSystemFont(12);
-  title.textColor = new Color(COLORS["--personal"]);
+  const header = w.addStack();
+  header.centerAlignContent();
+  addLine(header, "GRID", FALLBACK, 10, true);
+  header.addSpacer();
+  addLine(header, "NEXT", DIM, 9, false);
   w.addSpacer(6);
 
-  if (error || !state) {
-    const bad = error && /BAD TOKEN|token not set/.test(error.message);
-    const msg = w.addText(error ? (bad ? "BAD TOKEN" : "OFFLINE") : "NO DATA YET");
-    msg.font = Font.regularMonospacedSystemFont(11);
-    msg.textColor = new Color(DIM);
-    const hint = w.addText(
-      bad ? "re-paste token in script"
-        : error ? String(error.message).slice(0, 24)
-          : "open Grid to sync"
-    );
-    hint.font = Font.regularMonospacedSystemFont(9);
-    hint.textColor = new Color(DIM);
+  if (error) {
+    const denied = /denied|permission|access/i.test(error.message || "");
+    addLine(w, denied ? "NO ACCESS" : "ERROR", DIM, 11, true);
+    w.addSpacer(2);
+    addLine(w, denied ? "open script in app" : String(error.message).slice(0, 22), DIM, 9, false);
+    w.refreshAfterDate = new Date(Date.now() + 15 * 60000);
     return w;
   }
 
-  const tk = ymd(today());
-  for (const id of HABIT_ORDER) {
-    const h = state.habits?.[id];
-    if (!h) continue;
-    const color = COLORS[h.color] || COLORS["--personal"];
-    const scheduled = isScheduled(h, today());
-    const done = !!h.dates?.[tk];
-    // Filled box = logged today, hollow = still open, dash = not scheduled.
-    const glyph = !scheduled ? "–" : (done ? "▣" : "▢");
-    const line = w.addStack();
-    line.centerAlignContent();
-    row(line, glyph + " ", scheduled ? color : DIM, true);
-    row(line, shortName(h.name), scheduled ? color : DIM, false);
-    line.addSpacer();
-    row(line, String(currentStreak(h)), scheduled ? color : DIM, true);
+  if (!events.length) {
+    addLine(w, "NOTHING", DIM, 13, true);
+    addLine(w, "SCHEDULED", DIM, 13, true);
     w.addSpacer(3);
+    addLine(w, "next " + LOOKAHEAD_DAYS + " days", DIM, 9, false);
+    w.refreshAfterDate = new Date(Date.now() + 30 * 60000);
+    return w;
   }
 
-  w.addSpacer(4);
-  const cheer = w.addStack();
-  cheer.centerAlignContent();
-  row(cheer, "CHEER ", COLORS["--cheer"], true);
-  cheer.addSpacer();
-  row(cheer, cheerLabel(state), COLORS["--cheer"], false);
+  // Headline: the next thing coming up.
+  const next = events[0];
+  const hex = eventColor(next);
+  addLine(w, next.title || "(untitled)", hex, wide ? 15 : 13, true).lineLimit = wide ? 1 : 2;
+  w.addSpacer(2);
+  const meta = w.addStack();
+  meta.centerAlignContent();
+  addLine(meta, whenLabel(next), hex, 10, false);
+  const soon = soonLabel(next);
+  if (soon) { meta.addSpacer(6); addLine(meta, soon, DIM, 9, true); }
+
+  // Then the ones after it.
+  const rest = events.slice(1, 1 + (wide ? MAX_ROWS + 2 : MAX_ROWS));
+  if (rest.length) {
+    w.addSpacer(8);
+    for (const ev of rest) {
+      const row = w.addStack();
+      row.centerAlignContent();
+      addLine(row, "▪ ", eventColor(ev), 9, true);
+      addLine(row, ev.title || "(untitled)", DIM, 9, false).lineLimit = 1;
+      row.addSpacer();
+      addLine(row, whenLabel(ev), DIM, 9, false);
+      w.addSpacer(2);
+    }
+  }
+
+  // Roll the widget forward just after the current headline starts, so "NEXT"
+  // doesn't sit on a stale event. iOS still decides when to honour this.
+  const afterStart = new Date(next.startDate.getTime() + 60000);
+  const cap = new Date(Date.now() + 30 * 60000);
+  w.refreshAfterDate = afterStart > new Date() && afterStart < cap ? afterStart : cap;
   return w;
 }
 
-// Keep the small widget from wrapping — "Class Attendance" is too wide.
-function shortName(name) {
-  const n = (name || "").trim();
-  return n.length > 11 ? n.slice(0, 10) + "…" : n;
-}
-
-function cheerLabel(state) {
-  const next = state.cheer?.nextDate;
-  if (!next) return "none set";
-  const days = Math.round((parseYmd(next) - today()) / 86400000);
-  if (days < 0) return "past";
-  if (days === 0) return "today";
-  if (days === 1) return "tomorrow";
-  return days + "d";
-}
-
 /* ---------- run ---------- */
-let state = null, error = null;
+let events = [], error = null;
 try {
-  if (!TOKEN || TOKEN === "PASTE_YOUR_TOKEN_HERE") throw new Error("token not set");
-  state = await loadState();
+  events = await loadEvents();
 } catch (e) {
   error = e;
 }
 
-const widget = build(state, error);
+const widget = build(events, error);
 if (config.runsInWidget) Script.setWidget(widget);
 else await widget.presentSmall();
 Script.complete();
