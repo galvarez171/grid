@@ -14,13 +14,14 @@
 const LOOKAHEAD_DAYS = 14;   // how far out to look for "next"
 const MAX_ROWS = 3;          // extra events listed under the headline (small)
 
-// Grid's five circuit colors, matched against the calendar's name so the
-// widget reads as the same product as the app.
+// Grid's circuit colors, matched against the calendar's name so the widget
+// reads as the same product as the app. Habits are deliberately absent —
+// they live in Grid's own storage, not on a calendar, so nothing here can
+// ever match them.
 const CIRCUITS = [
   [/work|shift|job/i, "#00B4FF"],
   [/cheer/i, "#FF2D95"],
   [/class|school|course|lecture/i, "#A855F7"],
-  [/habit/i, "#FF8A1E"],
   [/personal|life|home/i, "#22E39A"]
 ];
 const BG = "#05070A";
