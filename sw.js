@@ -1,5 +1,5 @@
 // Grid — offline shell. Bump CACHE on every deploy or phones keep the old app.
-const CACHE = "grid-v2";
+const CACHE = "grid-v3";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-180.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -14,17 +14,40 @@ self.addEventListener("activate", e => {
   );
 });
 
-// Network-first so a fresh deploy shows up, cache as the offline fallback.
+/* Cache-first, then revalidate in the background.
+ *
+ * The app shell is a single file that rarely changes, so the old network-first
+ * order made every launch wait on a round trip to prove nothing had changed.
+ * Now the cached copy paints immediately and the network refreshes it for next
+ * time. A deploy therefore lands one launch later, which is the trade PLAN_V2
+ * §6 asks for — bumping CACHE above is what makes it land at all.
+ *
+ * Only same-origin GETs are touched. The Worker's /state call is cross-origin
+ * and must stay network-only (it's the one thing that has to be fresh), and
+ * it's the sync PUT besides, so both fall through untouched.
+ */
 self.addEventListener("fetch", e => {
-  if (e.request.method !== "GET") return;
+  const req = e.request;
+  if (req.method !== "GET") return;
+  if (new URL(req.url).origin !== self.location.origin) return;
+
   e.respondWith(
-    fetch(e.request)
-      .then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
-        return res;
-      })
-      .catch(() => caches.match(e.request).then(r => r || caches.match("./index.html")))
+    caches.match(req).then(cached => {
+      const network = fetch(req)
+        .then(res => {
+          // Only ever store a real success. The previous version cached
+          // whatever came back, so a 404 or a 500 became the offline copy.
+          if (res.ok && res.type === "basic") {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+          }
+          return res;
+        })
+        .catch(() => cached || caches.match("./index.html"));
+
+      // Cached copy wins the race; the fetch above still runs to refresh it.
+      return cached || network;
+    })
   );
 });
 

@@ -176,6 +176,48 @@ footer button{
   font:400 9px/1 ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;
   padding:10px 4px;cursor:pointer;
 }
+
+/* ---------- motion ----------
+   No haptics anywhere in here on purpose: Safari on iOS has never shipped the
+   Vibration API, so the "logged" moment has to land visually. */
+
+/* The checkbox pulses instead of snapping, so logging a habit registers. */
+@keyframes boxpulse{
+  0%  {transform:scale(1);   box-shadow:0 0 14px -4px var(--c)}
+  40% {transform:scale(1.13);box-shadow:0 0 22px 1px var(--c)}
+  100%{transform:scale(1);   box-shadow:0 0 14px -4px var(--c)}
+}
+.box.pulse{animation:boxpulse .34s ease-out}
+
+/* The streak digit rolls up rather than swapping in place. */
+@keyframes snumtick{
+  0%  {transform:translateY(7px);opacity:0}
+  60% {transform:translateY(-2px);opacity:1}
+  100%{transform:translateY(0);opacity:1}
+}
+.snum.tick{animation:snumtick .3s ease-out}
+
+/* Day cells answer on the way down, not on release. */
+.day{transition:background .08s linear,border-color .08s linear}
+.day:not(.pad):active{background:rgba(0,180,255,.10);border-color:var(--line2)}
+
+/* Boot flourish — first paint of a session only, then it gets out of the way. */
+@keyframes bootwipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes bootfade{from{opacity:0}to{opacity:1}}
+body.boot h1{animation:bootwipe .42s steps(9) both}
+body.boot header .sub{animation:bootfade .34s .26s both}
+
+/* The scanline texture drifts one full period (3px) and loops seamlessly.
+   PLAN_V2 wanted this tied to the panel in view; that needs scroll-driven
+   animation, which isn't dependable enough yet, so it's a slow constant
+   drift instead — same intent, no JS, nothing to regress. */
+@keyframes drift{from{background-position:0 0,0 0}to{background-position:0 0,0 3px}}
+body::before{animation:drift 7s linear infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .box.pulse,.snum.tick,body.boot h1,body.boot header .sub,body::before{animation:none}
+  .day{transition:none}
+}
 </style>
 </head>
 <body>
@@ -444,7 +486,7 @@ function renderHabits(){
         <div class="hsub">${sched?(on?"Logged today":"Not yet today"):'<span class="off">No class scheduled today</span>'}</div>
       </div>
       <div class="streak">
-        <div class="snum">${cur}</div>
+        <div class="snum" data-snum="${id}">${cur}</div>
         <div class="sbest">Best ${best}</div>
       </div>
     </div>`;
@@ -506,13 +548,32 @@ function renderClassDays(){
 
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
+/* renderHabits() rebuilds the row, so the animation has to be applied to the
+   fresh element afterwards. Toggling the class off and forcing a reflow lets
+   the same animation replay on a rapid second tap. */
+function restartAnim(el, cls){
+  if(!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+function flashLogged(id, streakGrew){
+  restartAnim(document.querySelector(`[data-habit="${id}"]`), "pulse");
+  if(streakGrew) restartAnim(document.querySelector(`[data-snum="${id}"]`), "tick");
+}
+
 /* ============ interaction ============ */
 document.addEventListener("click", e => {
   const box = e.target.closest("[data-habit]");
   if(box && !box.classList.contains("na")){
-    const h = S.habits[box.dataset.habit], k = ymd(today());
+    const id = box.dataset.habit;
+    const h = S.habits[id], k = ymd(today());
+    const wasStreak = currentStreak(h);
+    const turningOn = !h.dates[k];
     if(h.dates[k]) delete h.dates[k]; else h.dates[k] = true;
     save(); renderHabits(); renderCal();
+    // Only celebrate logging, not un-logging.
+    if(turningOn) flashLogged(id, currentStreak(h) > wasStreak);
     return;
   }
   const ren = e.target.closest("[data-rename]");
@@ -665,9 +726,23 @@ document.addEventListener("visibilitychange", ()=>{
 });
 setInterval(()=>{ if(ymd(today()) !== lastDay){ lastDay = ymd(today()); render(); } }, 60000);
 
+// iOS won't apply :active to an element unless the document carries a touch
+// listener, so the day-cell press state needs this no-op to show up at all.
+document.addEventListener("touchstart", ()=>{}, {passive:true});
+
+// Boot flourish on the session's first paint only — charming once, tiresome
+// on every return to the home screen.
+if(!sessionStorage.getItem("grid.booted")){
+  try{ sessionStorage.setItem("grid.booted","1"); }catch(e){}
+  document.body.classList.add("boot");
+  setTimeout(()=>document.body.classList.remove("boot"), 800);
+}
+
 render();
 pushSync(true);
-if("serviceWorker" in navigator && location.protocol === "https:"){
+// localhost counts as a secure context too, so allow it — otherwise the
+// offline shell can never be exercised outside of production.
+if("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost","127.0.0.1"].includes(location.hostname))){
   navigator.serviceWorker.register("sw.js").catch(()=>{});
 }
 </script>
