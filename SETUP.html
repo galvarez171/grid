@@ -1,3 +1,12 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- Without this, iOS Safari lays the page out at 980px and zooms out to fit,
+     which is exactly what makes a perfectly good page unreadable on a phone. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#05070A">
+<meta name="apple-mobile-web-app-title" content="Grid Setup">
 <title>Grid Setup Run-Through</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -205,7 +214,8 @@ footer p{max-width:66ch}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
-
+</head>
+<body>
 <div class="wrap">
 
 <header>
@@ -507,3 +517,6 @@ footer p{max-width:66ch}
 </footer>
 
 </div>
+
+</body>
+</html>
