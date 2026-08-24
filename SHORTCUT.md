@@ -45,10 +45,9 @@ Pick the single best category for this request: "[Shortcut Input]"
 Work — job shifts
 Cheer — cheer practices, games, exhibitions
 Classes — college classes, lectures, labs, exams
-Habits — meditation, studying, learning, personal routines
 Personal — family, appointments, errands, downtime
 
-Answer with one word only: Work, Cheer, Classes, Habits, or Personal.
+Answer with one word only: Work, Cheer, Classes, or Personal.
 ```
 
 - Save result as `Category`.
@@ -72,11 +71,12 @@ Answer with one word only: Work, Cheer, Classes, Habits, or Personal.
 - `Add New Event` — Calendar: **Work**, Title: `EventTitle`, Start: `StartDate`, End: `EndDate`
 - **Otherwise If** contains `Cheer` → Add New Event on **Cheer**
 - **Otherwise If** contains `Classes` → **Classes**
-- **Otherwise If** contains `Habits` → **Habits**
 - **Otherwise** → **Personal**
 - **End If**
 
-> Order matters. Check `Classes` before `Cheer`? No — no substring collisions among these five, any order works. Keep `Personal` as the final Otherwise so nothing is ever dropped.
+> Order matters. Check `Classes` before `Cheer`? No — no substring collisions among these four, any order works. Keep `Personal` as the final Otherwise so nothing is ever dropped.
+
+> **Changed 2026-08-24:** the `Habits` category was dropped when habit tracking was removed from the app. If your shortcut still offers it, delete that line from the prompt and its `Otherwise If` branch — an event landing on a calendar Grid no longer distinguishes just draws blue, which is harmless but misleading.
 
 **9. `Show Notification`**
 - Title: `Added to Grid`
@@ -103,7 +103,7 @@ Answer with one word only: Work, Cheer, Classes, Habits, or Personal.
 Three causes, in order of likelihood:
 
 1. **Shortcut name mismatch.** Must be `Grid Quick Add` — character for character, one space between each word. Retype it, don't trust the eye.
-2. **Calendar name mismatch.** `Work`, `Cheer`, `Classes`, `Habits`, `Personal`. If you named one "Work Shifts", the `Add New Event` action silently points at nothing.
+2. **Calendar name mismatch.** `Work`, `Cheer`, `Classes`, `Personal`. If you named one "Work Shifts", the `Add New Event` action silently points at nothing.
 3. **Nothing happened at all when you tapped Send.** The `shortcuts://` handoff never fired — that's a browser problem, not a shortcut problem. See BUILD.md.
 
 ## Related

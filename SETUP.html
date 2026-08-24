@@ -1,0 +1,509 @@
+<title>Grid Setup Run-Through</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+/* Grid's own palette, deliberately single-theme: this page documents a dark
+   app and shows its four colours in place, so it commits to that world on
+   either host ground. Every colour is painted explicitly for that reason. */
+:root{
+  --bg:#05070A;
+  --panel:#0B1017;
+  --panel2:#0E141C;
+  --line:#22303F;
+  --line2:#33475C;
+
+  --txt:#F2F8FD;
+  --dim:#C3D2E0;
+  --dimmer:#A2B4C6;
+
+  --cal:#00B4FF;      /* calendar, dates, hours, events */
+  --todo:#FF8A1E;     /* the to-do list */
+  --class:#22E39A;    /* classes */
+  --cheer:#FF2D95;    /* cheer */
+  --warn:#FF4D4D;     /* destructive, never a category */
+
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--txt);
+  font:400 16px/1.65 var(--sans);
+  -webkit-font-smoothing:antialiased;
+}
+/* The faint scanline field from the app itself, at a fraction of the strength
+   so it never competes with running text. */
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(1100px 520px at 50% -8%, rgba(0,180,255,.09), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.012) 0 1px, transparent 1px 3px);
+}
+.wrap{position:relative;z-index:1;max-width:760px;margin:0 auto;padding:0 20px 96px}
+
+a{color:var(--cal);text-decoration:none;border-bottom:1px solid rgba(0,180,255,.4)}
+a:hover{border-bottom-color:var(--cal)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--cal);outline-offset:3px}
+
+/* ---------- masthead ---------- */
+header{padding:64px 0 32px;border-bottom:1px solid var(--line)}
+.mark{
+  font:700 34px/1 var(--mono);letter-spacing:.42em;color:var(--txt);
+  text-shadow:0 0 30px rgba(0,180,255,.35);margin:0 0 18px
+}
+h1{
+  font:500 27px/1.25 var(--sans);margin:0 0 14px;text-wrap:balance;
+  letter-spacing:-.01em
+}
+.standfirst{color:var(--dim);font-size:17px;margin:0;max-width:62ch}
+.meta{
+  display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:24px;
+  font:500 11px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--dimmer)
+}
+.meta span{display:inline-flex;align-items:center;gap:7px}
+.meta i{width:7px;height:7px;background:var(--c);box-shadow:0 0 7px var(--c);flex:0 0 auto}
+
+/* ---------- generic type ---------- */
+h2{
+  font:500 21px/1.3 var(--sans);margin:0 0 10px;text-wrap:balance;letter-spacing:-.01em
+}
+h3{
+  font:600 12px/1.4 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dimmer);margin:32px 0 10px
+}
+p{margin:0 0 16px;max-width:66ch}
+ul,ol{margin:0 0 16px;padding-left:22px;max-width:66ch}
+li{margin-bottom:8px}
+li::marker{color:var(--dimmer)}
+strong{font-weight:600;color:var(--txt)}
+code{
+  font:400 .88em/1.4 var(--mono);background:var(--panel2);color:var(--cal);
+  border:1px solid var(--line);padding:1px 5px;white-space:nowrap
+}
+.section{padding:52px 0 0}
+
+/* ---------- the state board ---------- */
+.board{
+  border:1px solid var(--line);background:linear-gradient(180deg,var(--panel2),var(--panel));
+  margin:28px 0 0
+}
+.board table{width:100%;border-collapse:collapse}
+.board th{
+  font:600 10px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;
+  color:var(--dimmer);text-align:left;padding:13px 14px;border-bottom:1px solid var(--line);
+  font-weight:600
+}
+.board td{padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14.5px}
+.board tr:last-child td{border-bottom:0}
+.board td:first-child{font-family:var(--mono);font-size:13px;color:var(--txt);white-space:nowrap}
+.board td:last-child{color:var(--dim)}
+.pill{
+  display:inline-block;font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  padding:5px 8px;border:1px solid var(--c);color:var(--c);white-space:nowrap
+}
+.scroller{overflow-x:auto}
+
+/* ---------- the run of steps ---------- */
+/* A real sequence: each part depends on the one above it, so the rail is a
+   spine with a node per step rather than decoration. */
+.step{position:relative;padding:44px 0 0 62px}
+.step::before{
+  content:"";position:absolute;left:15px;top:0;bottom:-44px;width:1px;background:var(--line)
+}
+.step:last-of-type::before{bottom:auto;height:52px}
+.num{
+  position:absolute;left:0;top:44px;width:31px;height:31px;
+  display:grid;place-items:center;background:var(--bg);
+  border:1px solid var(--c);color:var(--c);
+  font:700 13px/1 var(--mono);box-shadow:0 0 16px -6px var(--c)
+}
+.eyebrow{
+  font:600 10px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--c);margin-bottom:9px;display:block
+}
+.step h2{margin-bottom:12px}
+
+.card{
+  border:1px solid var(--line);border-left:2px solid var(--c);
+  background:var(--panel);padding:16px 18px;margin:0 0 18px
+}
+.card p:last-child,.card ol:last-child,.card ul:last-child{margin-bottom:0}
+
+.actions{counter-reset:act;list-style:none;padding:0;margin:0 0 18px}
+.actions li{
+  counter-increment:act;position:relative;padding:0 0 14px 40px;margin:0;
+  border-bottom:1px solid var(--line)
+}
+.actions li:last-child{border-bottom:0;padding-bottom:0}
+.actions li + li{padding-top:14px}
+.actions li::before{
+  content:counter(act);position:absolute;left:0;top:0;
+  font:500 11px/1 var(--mono);color:var(--dimmer);
+  border:1px solid var(--line2);padding:5px 0;width:24px;text-align:center
+}
+.actions li + li::before{top:14px}
+.actions .lead{font-family:var(--mono);font-size:13.5px;color:var(--txt);letter-spacing:.01em}
+
+.kv{width:100%;border-collapse:collapse;margin:12px 0 0;font-size:14px}
+.kv th,.kv td{text-align:left;padding:9px 12px 9px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.kv tr:last-child th,.kv tr:last-child td{border-bottom:0}
+.kv th{
+  font:600 10px/1.4 var(--mono);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--dimmer);white-space:nowrap;padding-right:20px
+}
+.kv td{color:var(--dim)}
+.kv code{white-space:normal}
+
+.say{
+  font:500 17px/1.5 var(--mono);color:var(--txt);
+  border:1px solid var(--line2);background:var(--panel2);padding:14px 16px;margin:0 0 18px;
+  display:block
+}
+.say em{font-style:normal;color:var(--dimmer);font-size:12px;letter-spacing:.16em;text-transform:uppercase;display:block;margin-bottom:7px}
+
+.note{
+  border-left:2px solid var(--line2);padding:2px 0 2px 16px;margin:0 0 18px;
+  color:var(--dim);font-size:14.5px
+}
+.note strong{color:var(--txt)}
+
+.test{
+  border:1px dashed var(--line2);padding:14px 16px;margin:18px 0 0;
+  font-size:14.5px;color:var(--dim)
+}
+.test .lbl{
+  font:600 10px/1 var(--mono);letter-spacing:.2em;text-transform:uppercase;
+  color:var(--class);display:block;margin-bottom:8px
+}
+.test strong{color:var(--txt)}
+
+/* ---------- closing tables ---------- */
+.plain{width:100%;border-collapse:collapse;font-size:14.5px;margin-top:8px}
+.plain th{
+  font:600 10px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer);
+  text-align:left;padding:12px 14px 12px 0;border-bottom:1px solid var(--line2)
+}
+.plain td{padding:12px 14px 12px 0;border-bottom:1px solid var(--line);vertical-align:top;color:var(--dim)}
+.plain td:first-child{color:var(--txt)}
+.plain tr:last-child td{border-bottom:0}
+
+footer{margin-top:64px;padding-top:24px;border-top:1px solid var(--line);color:var(--dimmer);font-size:13px}
+footer p{max-width:66ch}
+
+@media (max-width:560px){
+  body{font-size:15.5px}
+  .mark{font-size:26px;letter-spacing:.3em}
+  h1{font-size:23px}
+  .step{padding-left:0}
+  .step::before{display:none}
+  .num{position:static;margin-bottom:12px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="mark">GRID</p>
+  <h1>Everything that has to be switched on, in the order it has to happen</h1>
+  <p class="standfirst">The app is deployed and the server is live. What's left lives on your phone: two Siri shortcuts, the widget, and the calendar names everything keys off. Work top to bottom — each part depends on the one above it.</p>
+  <div class="meta">
+    <span style="--c:var(--cal)"><i></i>Calendar</span>
+    <span style="--c:var(--todo)"><i></i>To-do</span>
+    <span style="--c:var(--class)"><i></i>Classes</span>
+    <span style="--c:var(--cheer)"><i></i>Cheer</span>
+  </div>
+</header>
+
+<section class="section">
+  <h2>What powers what</h2>
+  <p>Every visible part of Grid is fed by one of five things. If a part looks empty or dead, this table says which one to go fix.</p>
+
+  <div class="board scroller">
+    <table>
+      <thead>
+        <tr><th>Part of the app</th><th>Needs</th><th>Where it comes from</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Today box</td>
+          <td><span class="pill" style="--c:var(--cal)">Widget</span></td>
+          <td>Events come from the calendar mirror the widget pushes. To-dos are local.</td>
+        </tr>
+        <tr>
+          <td>Hour-by-hour day</td>
+          <td><span class="pill" style="--c:var(--cal)">Widget</span></td>
+          <td>Same mirror. Empty until the widget has run at least once.</td>
+        </tr>
+        <tr>
+          <td>To-Do panel</td>
+          <td><span class="pill" style="--c:var(--class)">Nothing</span></td>
+          <td>Works offline with no setup. Siri adds to it; it doesn't depend on Siri.</td>
+        </tr>
+        <tr>
+          <td>Quick Add</td>
+          <td><span class="pill" style="--c:var(--cal)">Shortcut</span></td>
+          <td><code>Grid Quick Add</code> — writes to Apple Calendar.</td>
+        </tr>
+        <tr>
+          <td>Scan a Schedule</td>
+          <td><span class="pill" style="--c:var(--cal)">Shortcut</span></td>
+          <td><code>Grid Scan</code> — optional, needs its own API key.</td>
+        </tr>
+        <tr>
+          <td>Sync + Reminders</td>
+          <td><span class="pill" style="--c:var(--todo)">Token</span></td>
+          <td>The 24-character token, pasted into the app once.</td>
+        </tr>
+        <tr>
+          <td>Ticking a box on the widget</td>
+          <td><span class="pill" style="--c:var(--todo)">Token</span></td>
+          <td>Same token again, stored in the iOS Keychain by the widget.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note" style="margin-top:22px">
+    <strong>Have the token to hand before you start.</strong> It's the 24-character string already saved in the app under <strong>Sync</strong>. You'll type it into two more places: the <code>Grid Todo</code> shortcut and the widget. It's not in this document and it's not in the repo — if you've lost it, it can only be replaced by generating a new one on the server, which means redoing all three.
+  </div>
+</section>
+
+<!-- ============ 1 ============ -->
+<section class="step" style="--c:var(--cal)">
+  <span class="num">1</span>
+  <span class="eyebrow">Foundation</span>
+  <h2>Name your calendars exactly right</h2>
+  <p>Grid never reads a calendar's colour — it reads its <em>name</em>, and matches it against four words. A calendar called "Work Shifts" still works; one called "Job" does not, and its events quietly draw blue instead of their real colour. <code>Grid Quick Add</code> is stricter: it writes to an exact name, and a mismatch means the event silently goes nowhere.</p>
+
+  <div class="scroller">
+  <table class="kv">
+    <tr><th>Work</th><td>Matches <code>work</code>, <code>shift</code>, <code>job</code> → blue</td></tr>
+    <tr><th>Cheer</th><td>Matches <code>cheer</code> → pink</td></tr>
+    <tr><th>Classes</th><td>Matches <code>class</code>, <code>school</code>, <code>course</code>, <code>lecture</code> → green</td></tr>
+    <tr><th>Personal</th><td>Anything else → blue</td></tr>
+  </table>
+  </div>
+
+  <p style="margin-top:16px">In the Calendar app: <strong>Calendars</strong> → <strong>Edit</strong> → check each name character for character. If you still have a <code>Habits</code> calendar from before, leave it — its events just draw blue now.</p>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="step" style="--c:var(--cal)">
+  <span class="num">2</span>
+  <span class="eyebrow">Siri · part one</span>
+  <h2>Teach <code>Grid Quick Add</code> to answer out loud</h2>
+  <p>Siri runs a shortcut when you say its name, so the name <em>is</em> the phrase — there's no "Add to Siri" step to find. But the shortcut was written for typed input, and Siri has nothing to hand it. Right now, spoken, it runs on an empty sentence and stops.</p>
+
+  <p>Open the existing <code>Grid Quick Add</code> shortcut and put two actions at the very top, <strong>above</strong> <code>Get Dates from Input</code>:</p>
+
+  <ol class="actions">
+    <li>
+      <span class="lead">If — Shortcut Input has any value</span>
+      <div><strong>Then:</strong> <code>Text</code> → set to <code>Shortcut Input</code><br>
+      <strong>Otherwise:</strong> <code>Ask for Input</code> → type <strong>Text</strong>, prompt <em>What's the event?</em></div>
+    </li>
+    <li>
+      <span class="lead">Set Variable — Sentence</span>
+      <div>Value is the <code>If</code> result (Shortcut Result).</div>
+    </li>
+  </ol>
+
+  <p>Then replace <strong>every</strong> later use of <code>Shortcut Input</code> with <code>Sentence</code> — in <code>Get Dates from Input</code>, in the <code>Use Model</code> prompt, and in the title <code>Text</code> action.</p>
+
+  <div class="card" style="--c:var(--todo)">
+    <p><strong>While you're in there:</strong> delete the <code>Habits</code> line from the model prompt and its <code>Otherwise If</code> branch. That category disappeared with the habit tracker, and an event filed there now just draws blue like any unrecognised calendar.</p>
+  </div>
+
+  <p>Typing in the app still works exactly as before — that path fills <code>Shortcut Input</code>, so the <code>If</code> takes the first branch and never asks.</p>
+
+  <div class="test">
+    <span class="lbl">Test it</span>
+    <strong>"Hey Siri, Grid Quick Add"</strong> → it asks what the event is → say <em>dentist Thursday at two</em> → the confirmation menu appears → tap <strong>Add</strong>. Open Calendar and check it landed on <strong>Personal</strong>, this coming Thursday, 2:00pm.
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="step" style="--c:var(--todo)">
+  <span class="num">3</span>
+  <span class="eyebrow">Siri · part two</span>
+  <h2>Build <code>Grid Todo</code></h2>
+  <p>New shortcut. Name it <strong>exactly</strong> <code>Grid Todo</code> — that string is the Siri phrase, so a stray space or a capital breaks it and Siri answers "I don't have an app for that".</p>
+
+  <span class="say"><em>What you'll say</em>Hey Siri, Grid Todo</span>
+
+  <ol class="actions">
+    <li>
+      <span class="lead">If — Shortcut Input has any value</span>
+      <div><strong>Then:</strong> <code>Text</code> → set to <code>Shortcut Input</code><br>
+      <strong>Otherwise:</strong> <code>Ask for Input</code> → type <strong>Text</strong>, prompt <em>What's on the list?</em></div>
+    </li>
+    <li>
+      <span class="lead">Set Variable — Item</span>
+      <div>Value is the <code>If</code> result.</div>
+    </li>
+    <li>
+      <span class="lead">If — Item has any value / Otherwise: Stop Shortcut</span>
+      <div>Siri hands back an empty string if you say nothing. Without this you get a blank row in the app.</div>
+    </li>
+    <li>
+      <span class="lead">Get Dates from Input → Format Date</span>
+      <div>Input <code>Item</code>, save as <code>Due</code>. Then <code>Format Date</code> with a <strong>Custom</strong> format of <code>yyyy-MM-dd</code>, saved as <code>DueYmd</code>.
+      <p style="margin:10px 0 0;font-size:13.5px">Apple's own date detector, the same engine that makes dates tappable in Mail. "pack cheer bag friday" lands on Friday. A sentence with no date in it leaves <code>DueYmd</code> empty and the server files it under today — which is what you want for "call mom".</p></div>
+    </li>
+    <li>
+      <span class="lead">Get Contents of URL</span>
+      <div>
+        <div class="scroller">
+        <table class="kv">
+          <tr><th>URL</th><td><code>https://grid-sync.gabealvarez.workers.dev/todo</code></td></tr>
+          <tr><th>Method</th><td>POST</td></tr>
+          <tr><th>Header</th><td><code>authorization</code> → <code>Bearer YOUR_TOKEN</code> — one space after Bearer</td></tr>
+          <tr><th>Header</th><td><code>content-type</code> → <code>application/json</code></td></tr>
+          <tr><th>Body</th><td><strong>JSON</strong> · <code>text</code> = <code>Item</code> (Text) · <code>date</code> = <code>DueYmd</code> (Text)</td></tr>
+        </table>
+        </div>
+      </div>
+    </li>
+    <li>
+      <span class="lead">Show Notification</span>
+      <div>Title <em>Added to Grid</em>, body <code>Item</code>. With AirPods in, <code>Speak Text</code> reads better than a banner you won't see.</div>
+    </li>
+  </ol>
+
+  <div class="card" style="--c:var(--cal)">
+    <p><strong>The item appears when you next open Grid, not instantly.</strong> A shortcut can't write to the app's storage — that's browser storage on your phone, with no way in. So the shortcut posts the one line to the server, and Grid drains that queue every time you open it or switch back to it. The signal it worked is the toast: <em>2 items from Siri</em>.</p>
+    <p>Nothing gets overwritten by this. Each item is deleted from the server only once it's safely in the app, and it carries an id so a failed delete can't duplicate it.</p>
+  </div>
+
+  <div class="test">
+    <span class="lbl">Test all three</span>
+    <strong>"Hey Siri, Grid Todo"</strong> → <em>buy poster board</em> → open Grid, it's under today.<br>
+    Again → <em>pack cheer bag friday</em> → it's on Friday, not today.<br>
+    Again → say nothing → nothing is added, no error.
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section class="step" style="--c:var(--cal)">
+  <span class="num">4</span>
+  <span class="eyebrow">The widget</span>
+  <h2>Replace the Scriptable script</h2>
+  <p>This one earns its place twice: it's the home-screen view of today, <em>and</em> it's the only thing on the phone that can see your calendar and tell the app about it. Until it runs, the hour-by-hour day view has nothing to draw.</p>
+
+  <ol class="actions">
+    <li>
+      <span class="lead">Paste the new script in</span>
+      <div>Scriptable → open your existing Grid script → select all → replace with the contents of <code>widget/grid-widget.js</code> from the repo.</div>
+    </li>
+    <li>
+      <span class="lead">Run it once inside Scriptable</span>
+      <div>It asks for the sync token and stores it in the <strong>iOS Keychain</strong> — not in the script file, which syncs through iCloud Drive and has a copy in a public repo.</div>
+    </li>
+    <li>
+      <span class="lead">Set the widget to medium or large</span>
+      <div>Long-press the home screen → the widget → <strong>Edit Widget</strong>, or remove and re-add at the right size. <strong>Small cannot work</strong> — iOS gives that size exactly one tap target for the whole widget, so per-row checkboxes are impossible. At small it shows the next event and a count, and tapping opens Grid.</div>
+    </li>
+    <li>
+      <span class="lead">Open Grid and tap a day</span>
+      <div>The hour grid should now have your events in it. If it's still empty, the widget hasn't run yet — run it by hand in Scriptable once more.</div>
+    </li>
+  </ol>
+
+  <div class="card" style="--c:var(--todo)">
+    <p><strong>Tapping a checkbox flashes Scriptable open for about a second.</strong> That's not a bug and it can't be avoided: a home-screen widget runs no code when tapped, it can only open a URL. The box opens the script with a toggle parameter, which flips the item on the server and exits.</p>
+    <p>The widget may not redraw straight away either — iOS decides when widgets refresh. The tap landed; the picture is stale. The app reconciles the moment you next open it.</p>
+  </div>
+
+  <div class="test">
+    <span class="lbl">Test it</span>
+    Tap a to-do box on the widget, then open Grid. The item should be ticked. If it isn't, the token in the Keychain is wrong — run the script by hand in Scriptable and watch for a <code>401</code>.
+  </div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="step" style="--c:var(--cal)">
+  <span class="num">5</span>
+  <span class="eyebrow">Optional</span>
+  <h2>Build <code>Grid Scan</code></h2>
+  <p>The photo-of-a-schedule path: point it at a GroupMe screenshot and it reads every shift at once. This is the only part of Grid that costs money — roughly <strong>4¢ a scan</strong>, so about 20¢ a month if you scan weekly.</p>
+
+  <p>It needs an Anthropic API key that you create and paste into the shortcut yourself. It never goes in the app or the repo. Full recipe in <code>CAPTURE.md</code>; set a $5/month spend limit in the console and forget about it.</p>
+
+  <div class="note">
+    <strong>Skip this if you enter shifts by hand.</strong> Everything else in Grid works without it — the <strong>Scan a Schedule</strong> button simply won't do anything until the shortcut exists.
+  </div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section class="step" style="--c:var(--class)">
+  <span class="num">6</span>
+  <span class="eyebrow">Confirm</span>
+  <h2>Walk the whole app once</h2>
+  <p>Force-quit Grid first and reopen it, so the new version takes over rather than a cached one. The header should read <code>v17</code>.</p>
+
+  <div class="scroller">
+  <table class="plain">
+    <thead>
+      <tr><th>Do this</th><th>You should see</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Open Grid</td><td>Today box: big date, a bar showing how much of the day is gone, your events beside your to-dos</td></tr>
+      <tr><td>Tap today on the month grid</td><td>Hour grid with events in their real hours, a blue now-line, to-dos in the <strong>Anytime</strong> column beside it</td></tr>
+      <tr><td>Type into the To-Do field</td><td>Item appears, and in the Today box at once</td></tr>
+      <tr><td>Tap the <code>···</code> on a to-do</td><td>Today / Tomorrow / a date picker / Delete</td></tr>
+      <tr><td>Pick day letters, then add an item</td><td>It files under <strong>Every week</strong> and reappears on those days</td></tr>
+      <tr><td>Leave something unticked overnight</td><td>Tomorrow it's under <strong>Rolled over</strong>, marked with its original date</td></tr>
+      <tr><td>Tap the month title</td><td>Jumps back to today from wherever you'd wandered</td></tr>
+      <tr><td>Type a sentence into Quick Add</td><td>Hands off to <code>Grid Quick Add</code>, which confirms before writing</td></tr>
+      <tr><td>Wait until 8pm with something open</td><td>A push naming what's still on the list</td></tr>
+      <tr><td>Sunday morning</td><td>A push pointing at the reset checklist</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="section">
+  <h2>When something doesn't work</h2>
+  <div class="scroller">
+  <table class="plain">
+    <thead><tr><th>What you see</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td>Siri: "I don't have an app for that"</td><td>The shortcut name isn't exactly right. Retype it — don't trust your eye on a double space.</td></tr>
+      <tr><td>Siri asks, you answer, nothing appears</td><td>Open Grid. Items arrive on the app's next launch, not instantly.</td></tr>
+      <tr><td>Spoken items never arrive at all</td><td>The token isn't saved in the app, so it never drains the queue. Grid → <strong>Sync</strong> → paste it.</td></tr>
+      <tr><td>Shortcut shows a <code>401</code></td><td>Wrong token, or a missing <code>Bearer </code> prefix in the header.</td></tr>
+      <tr><td>Hour grid is empty</td><td>The widget hasn't run since you installed it. Run it by hand in Scriptable.</td></tr>
+      <tr><td>Events show, to-dos don't, widget says <code>NO TOKEN</code></td><td>Run the script inside Scriptable and paste the token when asked.</td></tr>
+      <tr><td>Widget says <code>NO CALENDAR ACCESS</code></td><td>Settings → Scriptable → Calendars.</td></tr>
+      <tr><td>An event is the wrong colour</td><td>The calendar's name doesn't match any of the four words. Step 1.</td></tr>
+      <tr><td>Tapping Send in Quick Add does nothing</td><td>The <code>shortcuts://</code> handoff isn't reaching Shortcuts — a browser problem, not a shortcut one. See <code>BUILD.md</code>.</td></tr>
+      <tr><td>App still looks like the old one</td><td>Force-quit and reopen. The header tells you which build you're actually running.</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Things that will never work, and why</h2>
+  <p>Worth knowing so you don't spend an evening trying to fix them.</p>
+  <ul>
+    <li><strong>Grid can't read your calendar directly.</strong> iOS gives web apps no calendar access at all. Everything you see in the day view is a mirror the widget pushed, so it's as fresh as the widget's last run.</li>
+    <li><strong>A widget tap can't happen silently.</strong> Widgets run no code. Every tickable box costs a one-second flash of Scriptable.</li>
+    <li><strong>A small widget can't have checkboxes.</strong> One tap target per widget at that size, decided by iOS.</li>
+    <li><strong>The widget won't redraw the instant you tap.</strong> Refresh timing belongs to iOS, not to the script.</li>
+    <li><strong>A to-do never gets a time slot.</strong> That's the whole distinction: an event happens at an hour, a to-do happens some time that day. To-dos live in the <strong>Anytime</strong> column by design.</li>
+  </ul>
+</section>
+
+<footer>
+  <p>Grid v17 · sync worker live · four colours, one meaning each: blue is the calendar, orange is the to-do list, green is classes, pink is cheer.</p>
+  <p style="margin-top:10px">Longer references live beside the code: <code>SIRI.md</code> for both shortcut recipes, <code>WIDGET.md</code> for the widget, <code>SHORTCUT.md</code> and <code>CAPTURE.md</code> for Quick Add and Scan, <code>BUILD.md</code> for the reasoning behind the shape of the whole thing.</p>
+</footer>
+
+</div>

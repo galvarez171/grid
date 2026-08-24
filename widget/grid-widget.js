@@ -25,8 +25,6 @@ const MIRROR_DAYS = 21;      // how far ahead to mirror into the app's day view
 const MAX_EVENT_ROWS = { medium: 3, large: 7 };
 const MAX_TODO_ROWS = { medium: 3, large: 6 };
 
-// Grid's circuit colors, matched against the calendar's name so the widget
-// reads as the same product as the app.
 // One colour per meaning, matching the app exactly: blue is the calendar,
 // orange is the to-do list, green is classes, pink is cheer. Personal and
 // unrecognised calendars fall to blue — they are still scheduled things.
