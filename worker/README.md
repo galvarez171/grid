@@ -14,6 +14,9 @@ on it — if this is down, Grid works exactly as it does today.
 | PUT    | `/subscribe` | bearer | body is a `PushSubscription` from `PushManager.subscribe()`; stores it (single device) |
 | DELETE | `/subscribe` | bearer | clears the stored subscription |
 | POST   | `/push/test` | bearer | sends one test push to the stored subscription |
+| POST   | `/todo`      | bearer | `{text, date?}` from Siri/Shortcuts; queues one to-do item |
+| GET    | `/inbox`     | bearer | returns `{items}` — the queued to-dos the app hasn't taken yet |
+| POST   | `/inbox/ack` | bearer | `{ids:[…]}`; deletes exactly those items from the queue |
 
 A `scheduled` cron (`*/30 * * * *`) checks the evening habit nag once `TIMEZONE`
 (an IANA name, e.g. `America/Denver`) is set as a var — without it, it no-ops.
@@ -21,6 +24,22 @@ A `scheduled` cron (`*/30 * * * *`) checks the evening habit nag once `TIMEZONE`
 Auth header: `Authorization: Bearer <GRID_TOKEN>`. Anything else is `401`.
 The body must be a JSON object — arrays, scalars and `null` are rejected `400`
 so a confused caller can't blank a good blob.
+
+### The to-do inbox
+
+Shortcuts can't PUT `/state` — they only know the one line just spoken, and a
+blind write would clobber whatever the phone logged since. So they append to a
+queue instead, and the app drains it into `localStorage` on launch and on every
+return to the foreground.
+
+`date` is optional and must be `YYYY-MM-DD`; anything else (including the empty
+string Shortcuts sends when the sentence had no date in it) falls back to today
+in `TIMEZONE` — not the Worker's UTC today, which would push an evening item
+onto tomorrow.
+
+Ack is by id rather than a blind clear, so an item spoken between the app's GET
+and its ack survives. The app also dedupes on that id, so a failed ack costs
+nothing but a repeat drain. The queue is capped at 200 items, oldest dropped.
 
 ## Local test (no Cloudflare account needed)
 

@@ -17,6 +17,7 @@ The shortcut must be named **exactly** `Grid Quick Add`.
 
 **1. Receive input**
 - Shortcut settings (ⓘ icon) → toggle **Show in Share Sheet** OFF, but confirm **Shortcut Input** is available. When launched by URL the typed sentence arrives as `Shortcut Input`.
+- **To also drive this by voice**, add the `If Shortcut Input has any value / Ask for Input` head described in [SIRI.md](SIRI.md) Part 1 and use `Sentence` wherever the steps below say `Shortcut Input`. Siri has no typed sentence to pass, so without that head it runs on empty input and stops at step 3.
 
 **2. `Get Dates from Input`**
 - Input: **Shortcut Input**
@@ -104,6 +105,10 @@ Three causes, in order of likelihood:
 1. **Shortcut name mismatch.** Must be `Grid Quick Add` — character for character, one space between each word. Retype it, don't trust the eye.
 2. **Calendar name mismatch.** `Work`, `Cheer`, `Classes`, `Habits`, `Personal`. If you named one "Work Shifts", the `Add New Event` action silently points at nothing.
 3. **Nothing happened at all when you tapped Send.** The `shortcuts://` handoff never fired — that's a browser problem, not a shortcut problem. See BUILD.md.
+
+## Related
+
+- [SIRI.md](SIRI.md) — voice trigger for this shortcut, plus `Grid Todo`.
 
 ## v2 backlog
 

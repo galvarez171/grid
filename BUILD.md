@@ -16,6 +16,7 @@ Worth being straight about this before you build, because the honest version is 
 |---|---|---|
 | A thought — "dentist Thursday 2pm" | Type it, tap **Send to Calendar** | `Grid Quick Add` — on-device, free, instant |
 | A picture — GroupMe shifts, class schedule, cheer calendar | Tap **Scan a Schedule**, pick the photo | `Grid Scan` — reads the whole table at once |
+| A to-do, hands free | "Hey Siri, Grid Todo" | `Grid Todo` — queues it on the Worker; Grid picks it up on next open |
 | Something in another app | Share → **Grid Quick Add** / **Grid Scan** | Same two shortcuts, from anywhere |
 
 Grid also holds your streaks, cheer stats, and the Sunday reset — the things Apple Calendar has no place for.
@@ -40,6 +41,7 @@ That's why **Scan a Schedule** launches the shortcut with no input and the *shor
 | `icon-180.png` / `icon-512.png` | App icon |
 | `SHORTCUT.md` | `Grid Quick Add` — typed sentence → one event (on-device) |
 | `CAPTURE.md` | `Grid Scan` — photo of a schedule → many events (needs an API key) |
+| `SIRI.md` | `Grid Todo` — spoken to-do items, and the voice trigger for `Grid Quick Add` |
 | `BUILD.md` | This file |
 
 ---

@@ -15,6 +15,11 @@ import { localParts, decideNotifications } from "./triggers.mjs";
 const KV_KEY = "state";
 const SUB_KEY = "subscription";
 const SENT_KEY = "sent";
+// Shortcuts/Siri can't PUT the whole state — they don't have it, and a blind
+// PUT would clobber whatever the phone logged since. They append here instead,
+// and the app drains this queue into localStorage, which stays the truth.
+const INBOX_KEY = "inbox";
+const MAX_INBOX = 200;
 const MAX_BODY = 200 * 1024; // KV allows 25MB; Grid's blob is a few KB. Anything
                              // bigger than this is a bug, not a real state.
 
@@ -59,6 +64,60 @@ export default {
       const updatedAt = new Date().toISOString();
       await env.GRID_KV.put(KV_KEY, JSON.stringify({ v: 1, updatedAt, state }));
       return json({ ok: true, updatedAt }, 200, origin);
+    }
+
+    /* ---------- todo inbox (Siri / Shortcuts) ---------- */
+
+    if (url.pathname === "/todo" && req.method === "POST") {
+      const body = await req.text();
+      if (body.length > 4096) return json({ error: "payload too large" }, 413, origin);
+      let item;
+      try {
+        item = JSON.parse(body);
+      } catch {
+        return json({ error: "invalid json" }, 400, origin);
+      }
+      const text = String(item?.text ?? "").trim().slice(0, 200);
+      if (!text) return json({ error: "empty text" }, 400, origin);
+      // Siri hands over a date only when the sentence had one. Everything else
+      // lands on today, in the user's timezone — a Worker's own "today" is UTC
+      // and would push an evening item onto tomorrow.
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(item?.date || "")
+        ? item.date
+        : localParts(new Date(), env.TIMEZONE || "UTC").ymd;
+
+      const raw = await env.GRID_KV.get(INBOX_KEY);
+      const items = raw ? JSON.parse(raw) : [];
+      const entry = { id: crypto.randomUUID(), t: text, ymd: day, at: new Date().toISOString() };
+      items.push(entry);
+      // The app deletes what it drains, so this only grows while the phone is
+      // offline. Drop the oldest rather than reject — a lost week-old item is
+      // better than a rejected one the user just spoke.
+      await env.GRID_KV.put(INBOX_KEY, JSON.stringify(items.slice(-MAX_INBOX)));
+      return json({ ok: true, item: entry }, 200, origin);
+    }
+
+    if (url.pathname === "/inbox" && req.method === "GET") {
+      const raw = await env.GRID_KV.get(INBOX_KEY);
+      return json({ items: raw ? JSON.parse(raw) : [] }, 200, origin);
+    }
+
+    // Ack rather than a blind clear: an item added between the GET and this
+    // call must survive, or a todo spoken while the app was opening vanishes.
+    if (url.pathname === "/inbox/ack" && req.method === "POST") {
+      let ids;
+      try {
+        ids = JSON.parse(await req.text())?.ids;
+      } catch {
+        return json({ error: "invalid json" }, 400, origin);
+      }
+      if (!Array.isArray(ids)) return json({ error: "ids must be an array" }, 400, origin);
+      const done = new Set(ids);
+      const raw = await env.GRID_KV.get(INBOX_KEY);
+      const items = raw ? JSON.parse(raw) : [];
+      const left = items.filter(x => !done.has(x.id));
+      await env.GRID_KV.put(INBOX_KEY, JSON.stringify(left));
+      return json({ ok: true, remaining: left.length }, 200, origin);
     }
 
     if (url.pathname === "/subscribe" && req.method === "PUT") {

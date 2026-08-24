@@ -138,10 +138,32 @@ header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.1
 /* ---------- checklist ---------- */
 .chk{display:flex;align-items:flex-start;gap:10px;padding:9px 0;cursor:pointer}
 .chk + .chk{border-top:1px solid var(--line)}
-.cbox{flex:0 0 auto;width:16px;height:16px;border:1px solid var(--personal);margin-top:1px;display:grid;place-items:center}
-.cbox::after{content:"";width:7px;height:7px;background:var(--personal);opacity:0;box-shadow:0 0 8px var(--personal)}
-.chk[aria-checked="true"] .cbox::after{opacity:1}
-.chk[aria-checked="true"] .ctxt{color:var(--dimmer);text-decoration:line-through}
+.cbox{flex:0 0 auto;width:16px;height:16px;border:1px solid var(--c,var(--personal));margin-top:1px;display:grid;place-items:center}
+.cbox::after{content:"";width:7px;height:7px;background:var(--c,var(--personal));opacity:0;box-shadow:0 0 8px var(--c,var(--personal))}
+.chk[aria-checked="true"] .cbox::after,.cbox[aria-checked="true"]::after{opacity:1}
+.chk[aria-checked="true"] .ctxt,.td[aria-checked="true"] .ctxt{color:var(--dimmer);text-decoration:line-through}
+
+/* ---------- to-do ---------- */
+/* The nav lives in the panel head so the list itself stays a plain column —
+   the date is what changes, not the shape of the panel. */
+.tdnav{margin-left:auto;display:flex;align-items:center;gap:6px}
+.tdnav button{
+  background:transparent;border:1px solid var(--line2);color:var(--dim);
+  width:24px;height:22px;cursor:pointer;font:400 12px/1 monospace
+}
+.tdnav .tdlabel{
+  font-size:9px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;
+  min-width:80px;text-align:center;cursor:pointer
+}
+.td{display:flex;align-items:flex-start;gap:10px;padding:9px 0}
+.td + .td{border-top:1px solid var(--line)}
+.td .ctxt{flex:1;min-width:0;overflow-wrap:anywhere;cursor:pointer}
+.td .cbox{cursor:pointer}
+.tdel{
+  flex:0 0 auto;background:transparent;border:0;color:var(--dimmer);
+  font:400 15px/1 monospace;cursor:pointer;padding:0 2px
+}
+.tdempty{font-size:10px;color:var(--dimmer);letter-spacing:.06em;padding:4px 0}
 .ctxt{font-size:11.5px;line-height:1.5;color:var(--txt)}
 
 /* ---------- fields ---------- */
@@ -250,6 +272,26 @@ body::before{animation:drift 7s linear infinite}
     </div>
   </section>
 
+  <!-- TO-DO -->
+  <section class="panel" style="--c:var(--habits)">
+    <div class="phead">
+      <i class="tick" style="--c:var(--habits)"></i><h2>To-Do</h2>
+      <div class="tdnav">
+        <button id="tdPrev" aria-label="previous day">&lt;</button>
+        <span class="tdlabel" id="tdLabel" role="button" tabindex="0"></span>
+        <button id="tdNext" aria-label="next day">&gt;</button>
+      </div>
+    </div>
+    <div class="pbody">
+      <div id="todos"></div>
+      <div class="qa" style="margin-top:10px">
+        <input id="tdInput" type="text" placeholder="add an item" enterkeyhint="done"
+               autocapitalize="sentences" autocorrect="on" maxlength="200">
+      </div>
+      <div class="hint" id="tdHint" style="margin-top:9px"></div>
+    </div>
+  </section>
+
   <!-- HABITS -->
   <section class="panel" style="--c:var(--habits)">
     <div class="phead"><i class="tick" style="--c:var(--habits)"></i><h2>Streaks</h2></div>
@@ -351,7 +393,11 @@ const DEFAULT = {
     learning:   { name:"Learning",         color:"--work",    dates:{}, scheduled:null, renamable:true }
   },
   cheer: { dates:{}, nextName:"", nextDate:"" },
-  reset: { week:"", done:[false,false,false] }
+  reset: { week:"", done:[false,false,false] },
+  // "YYYY-MM-DD" -> [{id,t,done}]. Keyed by day rather than one flat list so a
+  // Siri item spoken on Tuesday for Thursday lands on Thursday, and so the
+  // calendar can mark which days still have something open.
+  todos: {}
 };
 const HABIT_ORDER = ["attendance","meditation","learning"];
 const RESET_ITEMS = [
@@ -394,7 +440,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -412,7 +458,45 @@ function pushSync(immediate){
 }
 document.addEventListener("visibilitychange", ()=>{
   if(document.visibilityState === "hidden") pushSync(true);
+  else drainInbox();
 });
+
+/* Siri and the Share Sheet can't PUT the whole state — they only know the one
+   line that was just spoken — so they append to a queue on the Worker and this
+   pulls it down. Ack only after the items are in localStorage; a failed ack
+   just means the next drain sees them again, and the id dedupe absorbs that. */
+async function drainInbox(){
+  const token = syncToken();
+  if(!token) return;
+  let items;
+  try{
+    const res = await fetch(SYNC_URL+"/inbox", { headers:{ authorization:"Bearer "+token } });
+    if(!res.ok) return;
+    items = (await res.json()).items;
+  }catch(e){ return; }
+  if(!items || !items.length) return;
+
+  let added = 0;
+  for(const it of items){
+    if(!it || !it.id || !it.t) continue;
+    const k = /^\d{4}-\d{2}-\d{2}$/.test(it.ymd || "") ? it.ymd : ymd(today());
+    const list = S.todos[k] = S.todos[k] || [];
+    if(list.some(x => x.id === it.id)) continue;
+    list.push({ id: it.id, t: String(it.t).slice(0,200), done:false });
+    added++;
+  }
+  if(added){
+    save(); renderTodos(); renderCal();
+    toast(added === 1 ? "1 item from Siri" : added+" items from Siri");
+  }
+  try{
+    await fetch(SYNC_URL+"/inbox/ack", {
+      method:"POST",
+      headers:{ "content-type":"application/json", authorization:"Bearer "+token },
+      body: JSON.stringify({ ids: items.map(x => x.id) })
+    });
+  }catch(e){}
+}
 
 /* ============ push notifications (step 3) ============ */
 const VAPID_PUBLIC_KEY = "BPirvr7mJvbF3jy-S0znrnX9fkiv_ejnj0AhXn150GDYI3Gv9cbMZq95k8w5ZSsVvdBt9-14k_iXynEQg0IDhe8";
@@ -547,12 +631,48 @@ function bestStreak(h){
 const $ = s => document.querySelector(s);
 let calMonth = today().getMonth(), calYear = today().getFullYear();
 
-function render(){ renderHeader(); renderHabits(); renderCheer(); renderCal(); renderReset(); renderClassDays(); }
+function render(){ renderHeader(); renderTodos(); renderHabits(); renderCheer(); renderCal(); renderReset(); renderClassDays(); }
 
 function renderHeader(){
   const t = today();
   const dow = t.toLocaleDateString(undefined,{weekday:"long"});
   $("#hdrsub").innerHTML = dow+"<br>"+MON[t.getMonth()].slice(0,3)+" "+t.getDate()+" "+t.getFullYear()+"<br>"+APP_VERSION;
+}
+
+/* The panel shows one day at a time. tdDate is view state, not saved state —
+   reopening the app should always land on today. */
+let tdDate = ymd(today());
+const uid = () => (crypto.randomUUID ? crypto.randomUUID()
+                                     : Date.now().toString(36)+Math.random().toString(36).slice(2,8));
+
+function dayLabel(k){
+  const t = today();
+  if(k === ymd(t)) return "Today";
+  if(k === ymd(addDays(t,1)))  return "Tomorrow";
+  if(k === ymd(addDays(t,-1))) return "Yesterday";
+  return parseYmd(k).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+}
+
+function renderTodos(){
+  const list = S.todos[tdDate] || [];
+  $("#tdLabel").textContent = dayLabel(tdDate);
+  $("#todos").innerHTML = list.length
+    ? list.map(x=>`<div class="td" aria-checked="${!!x.done}">
+        <span class="cbox" data-todo="${x.id}" role="checkbox" aria-checked="${!!x.done}" tabindex="0"></span>
+        <span class="ctxt" data-todo="${x.id}">${esc(x.t)}</span>
+        <button class="tdel" data-tdel="${x.id}" aria-label="delete item">&times;</button>
+      </div>`).join("")
+    : `<div class="tdempty">Nothing on this day's list.</div>`;
+  const open = list.filter(x=>!x.done).length;
+  $("#tdHint").innerHTML = (open ? open+(open===1?" item left. ":" items left. ") : "")
+    + `Say <b>Hey Siri, Grid Todo</b> to add one without opening this.`;
+}
+
+function addTodo(key, text, id){
+  const t = String(text).trim().slice(0,200);
+  if(!t) return false;
+  (S.todos[key] = S.todos[key] || []).push({ id: id || uid(), t, done:false });
+  return true;
 }
 
 function renderHabits(){
@@ -608,8 +728,12 @@ function renderCal(){
       .map(id=>`<i class="dot" style="--c:var(${S.habits[id].color})"></i>`).join("")
       + (S.cheer.dates[key] ? `<i class="dot" style="--c:var(--cheer)"></i>` : "");
     if(dots) logged++;
+    // An open to-do is a reminder, not a log — it must not inflate the
+    // "active days" count, so it is appended after that tally.
+    const openTodo = (S.todos[key] || []).some(x => !x.done);
     html += `<div class="day ${key===tk?"today":""}" data-day="${key}">
-      <span>${d}</span><span class="dots">${dots}</span></div>`;
+      <span>${d}</span><span class="dots">${dots}${
+        openTodo ? `<i class="dot" style="--c:var(--habits)"></i>` : ""}</span></div>`;
   }
   $("#cal").innerHTML = html;
   $("#calSummary").textContent = logged+" active days";
@@ -685,9 +809,44 @@ document.addEventListener("click", e => {
     save(); renderClassDays(); renderHabits();
     return;
   }
+  const tdel = e.target.closest("[data-tdel]");
+  if(tdel){
+    const list = S.todos[tdDate] || [];
+    const at = list.findIndex(x => x.id === tdel.dataset.tdel);
+    if(at >= 0) list.splice(at,1);
+    if(!list.length) delete S.todos[tdDate];
+    save(); renderTodos(); renderCal();
+    return;
+  }
+  const td = e.target.closest("[data-todo]");
+  if(td){
+    const item = (S.todos[tdDate] || []).find(x => x.id === td.dataset.todo);
+    if(item){ item.done = !item.done; save(); renderTodos(); renderCal(); }
+    return;
+  }
   const day = e.target.closest("[data-day]");
   if(day) editDay(day.dataset.day);
 });
+
+/* ============ to-do ============ */
+const tdInput = $("#tdInput");
+tdInput.addEventListener("keydown", e => {
+  if(e.key !== "Enter") return;
+  e.preventDefault();
+  if(!addTodo(tdDate, tdInput.value)) return;
+  tdInput.value = "";
+  save(); renderTodos(); renderCal();
+});
+// iOS closes the keyboard on Done without always firing keydown for it.
+tdInput.addEventListener("change", ()=>{
+  if(!addTodo(tdDate, tdInput.value)) return;
+  tdInput.value = "";
+  save(); renderTodos(); renderCal();
+});
+function shiftDay(n){ tdDate = ymd(addDays(parseYmd(tdDate), n)); renderTodos(); }
+$("#tdPrev").onclick = ()=> shiftDay(-1);
+$("#tdNext").onclick = ()=> shiftDay(1);
+$("#tdLabel").onclick = ()=>{ tdDate = ymd(today()); renderTodos(); };
 
 // backfill / undo any day
 function editDay(key){
@@ -914,12 +1073,21 @@ function toast(msg){
 }
 // day can roll over while the app sits open on the home screen
 let lastDay = ymd(today());
+// Only follow the rollover if the To-Do panel was showing the old today —
+// a day the user deliberately navigated to must stay put.
+function rollDay(){
+  const now = ymd(today());
+  if(now === lastDay) return false;
+  if(tdDate === lastDay) tdDate = now;
+  lastDay = now;
+  return true;
+}
 document.addEventListener("visibilitychange", ()=>{
   if(document.visibilityState !== "visible") return;
-  if(ymd(today()) !== lastDay){ lastDay = ymd(today()); calMonth=today().getMonth(); calYear=today().getFullYear(); }
+  if(rollDay()){ calMonth=today().getMonth(); calYear=today().getFullYear(); }
   render();
 });
-setInterval(()=>{ if(ymd(today()) !== lastDay){ lastDay = ymd(today()); render(); } }, 60000);
+setInterval(()=>{ if(rollDay()) render(); }, 60000);
 
 // iOS won't apply :active to an element unless the document carries a touch
 // listener, so the day-cell press state needs this no-op to show up at all.
@@ -935,6 +1103,7 @@ if(!sessionStorage.getItem("grid.booted")){
 
 render();
 pushSync(true);
+drainInbox();
 // localhost counts as a secure context too, so allow it — otherwise the
 // offline shell can never be exercised outside of production.
 if("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost","127.0.0.1"].includes(location.hostname))){
