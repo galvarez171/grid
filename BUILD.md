@@ -1,6 +1,6 @@
 # Grid — build reference (v2)
 
-Supersedes `Grid_Build_Reference.pdf`. The concept, five circuits, and visual identity are unchanged. What changed is *where the app lives*, *how events get in*, and fixes to streak logic the original spec left undefined.
+Supersedes `Grid_Build_Reference.pdf`. The concept, five circuits, and visual identity are unchanged. What changed is *where the app lives*, *how events get in*, and — as of 2026-08-24 — that habit streaks and cheer stats are gone, leaving the schedule and the to-do list.
 
 ---
 
@@ -19,7 +19,7 @@ Worth being straight about this before you build, because the honest version is 
 | A to-do, hands free | "Hey Siri, Grid Todo" | `Grid Todo` — queues it on the Worker; Grid picks it up on next open |
 | Something in another app | Share → **Grid Quick Add** / **Grid Scan** | Same two shortcuts, from anywhere |
 
-Grid also holds your streaks, cheer stats, and the Sunday reset — the things Apple Calendar has no place for.
+Grid holds the to-do list and the Sunday reset — the things Apple Calendar has no place for — and draws the day hour by hour with both halves side by side.
 
 So: **one input surface, one view surface.** Not one app. Anyone who tells you a web page can be your iPhone calendar is selling you a worse calendar.
 
@@ -50,7 +50,7 @@ That's why **Scan a Schedule** launches the shortcut with no input and the *shor
 ## Corrections to the original plan
 
 **1. Hosting moved off Claude Artifacts.**
-Artifacts render inside a sandboxed iframe. Two consequences the original plan didn't account for: custom URL schemes like `shortcuts://` are normally blocked from a sandbox, and storage tied to a sandbox origin isn't durable. That put both the one unfinished feature *and* the entire streak history on the same bet. Grid is now a plain static page you host yourself — top-level navigation, a stable origin, and no claude.ai login between you and the app.
+Artifacts render inside a sandboxed iframe. Two consequences the original plan didn't account for: custom URL schemes like `shortcuts://` are normally blocked from a sandbox, and storage tied to a sandbox origin isn't durable. That put both the one unfinished feature *and* the entire local history on the same bet. Grid is now a plain static page you host yourself — top-level navigation, a stable origin, and no claude.ai login between you and the app.
 
 **2. Quick Add no longer asks the model to do date math.**
 See `SHORTCUT.md`. Short version: `Get Dates from Input` handles time, the model only picks a category.
@@ -58,23 +58,20 @@ See `SHORTCUT.md`. Short version: `Get Dates from Input` handles time, the model
 **3. The web app doesn't parse at all.**
 The original had a JS preview *and* a shortcut parse. Two parsers eventually disagree, and the one you see isn't the one that writes. Now the sentence goes straight to the shortcut, which shows its own confirmation before writing.
 
-**4. Streaks are stored as dates, not counters.**
-A counter that resets on a missed day is unrepairable — miss one tap and history is gone. Grid stores the set of days. The streak is derived, so tapping any past day in the month grid backfills or undoes it.
+**4. Habit streaks and cheer stats were removed (2026-08-24).**
+Grid stopped being a habit tracker. What survived is the part that got used daily: the schedule and the to-do list. The old habit and cheer data is left untouched in `localStorage` — nothing reads it, nothing deletes it — so it's still in an export if it's ever wanted back.
 
-**5. Class attendance skips non-class days.**
-The original never said what Saturday does to the attendance streak. Set your class weekdays in the app; days without class are skipped — they neither extend nor break the streak.
+**5. To-dos roll over; the schedule doesn't.**
+The two halves have different shapes, which is why they're stored differently. A to-do can happen any time that day, so an unfinished one stays in front of you under **Rolled over** until it's done or moved. An event happens at a time, so it belongs to its hour and nowhere else. A weekly to-do is a pattern (`{dows, from}`) projected onto matching days, never a row written per week.
 
-**6. Today gets grace.**
-An unchecked today doesn't zero your streak, because the day isn't over. It counts from yesterday until you tap it.
+**6. The day view reads a mirror, not Apple Calendar.**
+iOS gives a web app no calendar access at all. The Scriptable widget is native, so it pushes a flattened copy of the next three weeks to the Worker, and the app caches that. See `WIDGET.md`. Grid never writes back — Apple Calendar stays the truth.
 
-**7. Cheer countdown has an explicit source.**
-The app can't read Apple Calendar, so the next-event name and date are fields you set. Setting them is part of the Sunday Reset checklist.
+**7. The month grid shows what's outstanding.**
+A blue dot means the day has events; an orange one means something on the list is still open. Tap any day for its hour-by-hour schedule.
 
-**8. The month grid shows your actual data.**
-Colored dots per logged habit, plus cheer. Tap any past day to edit it.
-
-**9. Backup exists.**
-Export/Import JSON at the bottom. Clearing Safari data wipes local storage — export after any long streak you'd hate to lose.
+**8. Backup exists.**
+Export/Import JSON at the bottom. Clearing Safari data wipes local storage — export before anything drastic.
 
 ---
 
@@ -89,7 +86,7 @@ Calendar app → **Calendars** → **Add Calendar…**. Create five, spelled exa
 | `Work` | Blue | Shifts — irregular, from GroupMe, entered manually |
 | `Cheer` | Pink | Practices and events |
 | `Classes` | Purple | Fixed weekly class schedule, recurring |
-| `Habits` | Orange | Meditation, the Learning slot |
+| `Habits` | Orange | The to-do accent; still a calendar you can file events under |
 | `Personal` | Green | Family, appointments, downtime |
 
 Apple's color presets won't match the app's hex values exactly. Doesn't matter.
@@ -104,7 +101,7 @@ GitHub Pages. Free, HTTPS, permanent URL.
 4. **Settings → Pages** → Source: **Deploy from a branch** → Branch: `main`, folder `/ (root)` → Save.
 5. Wait ~1 minute. Your URL is `https://YOURNAME.github.io/grid/`.
 
-Public repo means the *code* is public. Your streak data never leaves your phone — it's in browser storage, not the repo.
+Public repo means the *code* is public. Your data never leaves your phone except through the sync Worker, which is behind a bearer token you hold.
 
 ### Part 3 — Home screen (~1 min)
 

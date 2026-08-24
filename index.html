@@ -13,15 +13,17 @@
 <style>
 :root{
   --bg:#05070A; --panel:#0A0E14; --panel2:#0D131B;
-  --line:#16202B; --line2:#1E2C3A;
-  --txt:#C9D6E2; --dim:#5C6E80; --dimmer:#38454F;
+  --line:#1B2734; --line2:#2A3B4D;
+  /* Raised across the board: the old ramp bottomed out at #38454F, which on a
+     phone in daylight was effectively invisible against #05070A. */
+  --txt:#E8F1F8; --dim:#9DB0C2; --dimmer:#72859A;
   --work:#00B4FF; --cheer:#FF2D95; --classes:#A855F7; --habits:#FF8A1E; --personal:#22E39A;
   --pad:14px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--txt)}
 body{
-  font:400 14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font:400 15px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) calc(env(safe-area-inset-bottom) + 24px) env(safe-area-inset-left);
   -webkit-user-select:none;user-select:none;
   overflow-x:hidden;
@@ -37,12 +39,12 @@ body::before{
 /* ---------- type ---------- */
 h1,h2,.lbl,.btn,.tab{text-transform:uppercase;letter-spacing:.14em}
 h1{font-size:22px;margin:0;letter-spacing:.42em;font-weight:600}
-h2{font-size:10px;margin:0;color:var(--dim);font-weight:500;letter-spacing:.2em}
-.lbl{font-size:9px;color:var(--dimmer);letter-spacing:.18em}
+h2{font-size:11px;margin:0;color:var(--dim);font-weight:500;letter-spacing:.2em}
+.lbl{font-size:10px;color:var(--dimmer);letter-spacing:.18em}
 
 /* ---------- header ---------- */
 header{padding:20px 0 14px;display:flex;align-items:baseline;justify-content:space-between;gap:12px}
-header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.16em;text-transform:uppercase;line-height:1.6}
+header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.16em;text-transform:uppercase;line-height:1.6}
 
 /* ---------- panel ---------- */
 .panel{
@@ -75,46 +77,13 @@ header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.1
 .btn{
   display:block;width:100%;text-align:center;text-decoration:none;
   background:transparent;border:1px solid var(--c,var(--line2));color:var(--c,var(--txt));
-  font:600 11px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.18em;
+  font:600 12px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.18em;
   padding:13px 10px;cursor:pointer;border-radius:0;-webkit-appearance:none;
 }
 .btn:active{background:color-mix(in srgb,var(--c,#fff) 16%,transparent)}
 .btn[disabled]{opacity:.35;pointer-events:none}
-.hint{font-size:10px;color:var(--dimmer);line-height:1.55}
+.hint{font-size:11px;color:var(--dimmer);line-height:1.55}
 .hint b{color:var(--dim);font-weight:400}
-
-/* ---------- habits ---------- */
-.habit{
-  display:flex;align-items:center;gap:11px;padding:11px 0;
-  border-bottom:1px solid var(--line);
-}
-.habit:last-child{border-bottom:0;padding-bottom:2px}
-.habit:first-child{padding-top:2px}
-.box{
-  flex:0 0 auto;width:30px;height:30px;border:1px solid var(--c);
-  display:grid;place-items:center;cursor:pointer;position:relative;
-}
-.box::after{
-  content:"";width:12px;height:12px;background:var(--c);opacity:0;transform:scale(.4);
-  transition:opacity .12s,transform .12s;box-shadow:0 0 10px var(--c);
-}
-.box[aria-checked="true"]::after{opacity:1;transform:scale(1)}
-.box[aria-checked="true"]{box-shadow:0 0 14px -4px var(--c)}
-.box.na{border-color:var(--dimmer);cursor:default;opacity:.4}
-.hmeta{flex:1;min-width:0}
-.hname{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--txt);display:flex;align-items:center;gap:6px}
-.hname .edit{font-size:9px;color:var(--dimmer);border:1px solid var(--line2);padding:1px 4px;cursor:pointer;letter-spacing:.1em}
-.hsub{font-size:10px;color:var(--dim);margin-top:3px;letter-spacing:.06em}
-.hsub .off{color:var(--dimmer)}
-.streak{flex:0 0 auto;text-align:right;min-width:56px}
-.snum{font-size:20px;line-height:1;color:var(--c);font-weight:600;font-variant-numeric:tabular-nums}
-.sbest{font-size:9px;color:var(--dimmer);letter-spacing:.12em;margin-top:3px}
-
-/* ---------- stat row ---------- */
-.stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
-.stat{background:var(--panel);padding:12px;text-align:center}
-.snum2{font-size:26px;line-height:1.1;font-weight:600;color:var(--c);font-variant-numeric:tabular-nums}
-.slbl{font-size:9px;color:var(--dimmer);letter-spacing:.16em;text-transform:uppercase;margin-top:5px}
 
 /* ---------- calendar ---------- */
 .calhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
@@ -124,10 +93,10 @@ header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.1
   width:26px;height:24px;cursor:pointer;font:400 12px/1 monospace
 }
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
-.cal .dow{font-size:8px;color:var(--dimmer);text-align:center;letter-spacing:.1em;padding-bottom:4px}
+.cal .dow{font-size:9px;color:var(--dimmer);text-align:center;letter-spacing:.1em;padding-bottom:4px}
 .day{
   aspect-ratio:1;border:1px solid transparent;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:3px;font-size:11px;color:var(--dim);
+  align-items:center;justify-content:center;gap:3px;font-size:12px;color:var(--dim);
   font-variant-numeric:tabular-nums;
 }
 .day.pad{color:var(--dimmer);opacity:.3}
@@ -136,25 +105,61 @@ header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.1
 .dots{display:flex;gap:2px;height:4px}
 .dot{width:4px;height:4px;background:var(--c);box-shadow:0 0 4px var(--c)}
 
+/* ---------- today ---------- */
+.panel.today{border-color:var(--line2)}
+.panel.today .pbody{padding:14px}
+.tdate{display:flex;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+/* The date is the one thing you should be able to read from arm's length. */
+.tdnum{
+  font-size:52px;line-height:.85;font-weight:600;color:var(--work);
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+  text-shadow:0 0 26px rgba(0,180,255,.35)
+}
+.tdmeta{flex:1;min-width:0}
+.tdow{font-size:16px;letter-spacing:.24em;text-transform:uppercase;color:var(--txt);font-weight:500}
+.tmon{font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim);margin-top:4px}
+/* How much of the day is gone — the only genuinely graphic thing here, and it
+   costs one div. */
+.tbar{height:3px;background:var(--line);margin-top:9px;position:relative;overflow:hidden}
+.tbar i{
+  position:absolute;inset:0 auto 0 0;background:var(--work);
+  box-shadow:0 0 10px var(--work);display:block
+}
+.tcols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+.tcol{min-width:0}
+.trow{display:flex;align-items:baseline;gap:6px;padding:5px 0}
+.trow + .trow{border-top:1px solid var(--line)}
+.trow .tt{
+  flex:1;min-width:0;font-size:12px;color:var(--txt);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+}
+.trow .th{font-size:10px;color:var(--dim);letter-spacing:.06em;white-space:nowrap;font-variant-numeric:tabular-nums}
+.trow.past .tt,.trow.past .th{color:var(--dimmer)}
+.trow .tdotc{flex:0 0 auto;width:4px;height:4px;background:var(--c);box-shadow:0 0 5px var(--c);align-self:center}
+.tnone{font-size:11px;color:var(--dimmer);padding:5px 0}
+
 /* ---------- day sheet ---------- */
 .sheet{border-top:1px solid var(--line);margin-top:12px;padding-top:12px}
 .shead{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
-.shead .sdate{font-size:12px;color:var(--txt);letter-spacing:.1em;text-transform:uppercase}
+.shead .sdate{font-size:13px;color:var(--txt);letter-spacing:.1em;text-transform:uppercase}
 .shead .sclose{
   margin-left:auto;background:transparent;border:1px solid var(--line2);color:var(--dim);
   font:400 9px/1 ui-monospace,monospace;letter-spacing:.14em;padding:5px 8px;cursor:pointer
 }
-.ssec{font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer);margin:12px 0 6px}
+.ssec{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer);margin:12px 0 6px}
 .allday{display:flex;flex-wrap:wrap;gap:5px}
 .allday span{
-  font-size:10px;color:var(--c);border:1px solid var(--c);padding:3px 6px;
+  font-size:11px;color:var(--c);border:1px solid var(--c);padding:3px 6px;
   opacity:.9;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
 }
 /* The hour lines are painted as a background so the lane stays one element and
    an event block can be positioned against real minutes, not a row count. */
+/* To-dos beside the hour grid rather than under it: on a phone the grid is
+   tall enough that anything below it is off-screen when you open the day. */
+.scols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:12px;align-items:start}
 .hours{display:flex;gap:6px}
 .hrlab{
-  flex:0 0 34px;font-size:8.5px;color:var(--dimmer);letter-spacing:.06em;
+  flex:0 0 38px;font-size:9.5px;color:var(--dimmer);letter-spacing:.06em;
   display:flex;flex-direction:column;text-align:right
 }
 .hrlab span{display:block}
@@ -165,13 +170,13 @@ header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.1
 .ev{
   position:absolute;left:2px;overflow:hidden;
   border-left:2px solid var(--c);background:color-mix(in srgb,var(--c) 14%,transparent);
-  padding:2px 4px;font-size:9.5px;line-height:1.25;color:var(--txt)
+  padding:2px 4px;font-size:11px;line-height:1.25;color:var(--txt)
 }
 .ev b{display:block;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ev i{font-style:normal;color:var(--dimmer);font-size:8.5px}
+.ev i{font-style:normal;color:var(--dim);font-size:9.5px}
 .nowline{position:absolute;left:0;right:0;height:1px;background:var(--work);box-shadow:0 0 6px var(--work)}
 .nowline::before{content:"";position:absolute;left:0;top:-2px;width:5px;height:5px;background:var(--work)}
-.sempty{font-size:10px;color:var(--dimmer);padding:2px 0}
+.sempty{font-size:11px;color:var(--dimmer);padding:2px 0}
 .shabits{display:flex;flex-wrap:wrap;gap:6px}
 .shabits button{
   background:transparent;border:1px solid var(--c,var(--line2));color:var(--c,var(--dim));
@@ -198,7 +203,7 @@ header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.1
   width:24px;height:22px;cursor:pointer;font:400 12px/1 monospace
 }
 .tdnav .tdlabel{
-  font-size:9px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;
+  font-size:10px;color:var(--dim);letter-spacing:.14em;text-transform:uppercase;
   min-width:80px;text-align:center;cursor:pointer
 }
 .td{display:flex;align-items:flex-start;gap:10px;padding:9px 0}
@@ -206,36 +211,36 @@ header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.1
 .td .ctxt{flex:1;min-width:0;overflow-wrap:anywhere;cursor:pointer}
 .td .cbox{cursor:pointer}
 .tdel{
-  flex:0 0 auto;background:transparent;border:0;color:var(--dimmer);
-  font:400 15px/1 monospace;cursor:pointer;padding:0 2px
+  flex:0 0 auto;background:transparent;border:0;color:var(--dim);
+  font:400 16px/1 monospace;cursor:pointer;padding:0 2px
 }
-.tdempty{font-size:10px;color:var(--dimmer);letter-spacing:.06em;padding:4px 0}
+.tdempty{font-size:11px;color:var(--dimmer);letter-spacing:.06em;padding:4px 0}
 .tdgrp{
-  font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer);
+  font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dimmer);
   padding:10px 0 2px;border-top:1px solid var(--line);margin-top:4px
 }
 .tdgrp:first-child{border-top:0;margin-top:0;padding-top:0}
 .tdgrp.late{color:var(--cheer)}
 /* The origin date of a rolled-over item. Without it an overdue row is
    indistinguishable from one you added today. */
-.tdwhen{font-size:9px;color:var(--dimmer);letter-spacing:.1em;margin-left:6px;white-space:nowrap}
-.td .tdrep{font-size:9px;color:var(--habits);letter-spacing:.1em;margin-left:6px;white-space:nowrap;opacity:.75}
+.tdwhen{font-size:10px;color:var(--dimmer);letter-spacing:.1em;margin-left:6px;white-space:nowrap}
+.td .tdrep{font-size:10px;color:var(--habits);letter-spacing:.1em;margin-left:6px;white-space:nowrap;opacity:.75}
 .tdmore{
-  flex:0 0 auto;background:transparent;border:0;color:var(--dimmer);
-  font:400 13px/1 monospace;cursor:pointer;padding:0 2px;letter-spacing:.1em
+  flex:0 0 auto;background:transparent;border:0;color:var(--dim);
+  font:400 15px/1 monospace;cursor:pointer;padding:0 2px;letter-spacing:.1em
 }
 .tdacts{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:0 0 9px 26px}
 .tdacts button,.tdacts input{
   background:transparent;border:1px solid var(--line2);color:var(--dim);
-  font:400 9.5px/1 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;
-  padding:6px 8px;cursor:pointer;border-radius:0;-webkit-appearance:none
+  font:400 10.5px/1 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;
+  padding:7px 9px;cursor:pointer;border-radius:0;-webkit-appearance:none
 }
 .tdacts input{text-transform:none;color:var(--txt);-webkit-user-select:text;user-select:text}
 .tdacts button.warn{color:var(--cheer);border-color:rgba(255,45,149,.35)}
 /* The repeat picker only earns its space once you're typing something. */
 .tdrepbar{display:flex;align-items:center;gap:9px;margin-top:9px}
 .tdrepbar .lbl{flex:0 0 auto}
-.ctxt{font-size:11.5px;line-height:1.5;color:var(--txt)}
+.ctxt{font-size:13px;line-height:1.5;color:var(--txt)}
 
 /* ---------- fields ---------- */
 .field{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}
@@ -249,8 +254,8 @@ header .sub{font-size:9px;color:var(--dimmer);text-align:right;letter-spacing:.1
 .field input:focus{outline:none;border-color:var(--cheer)}
 .days{display:flex;gap:4px}
 .days button{
-  width:26px;height:26px;background:transparent;border:1px solid var(--line2);
-  color:var(--dimmer);font:400 10px/1 ui-monospace,monospace;cursor:pointer;
+  width:28px;height:28px;background:transparent;border:1px solid var(--line2);
+  color:var(--dim);font:400 11px/1 ui-monospace,monospace;cursor:pointer;
 }
 .days button[aria-pressed="true"]{border-color:var(--c,var(--classes));color:var(--c,var(--classes));box-shadow:0 0 10px -4px var(--c,var(--classes))}
 
@@ -284,21 +289,13 @@ footer button{
    No haptics anywhere in here on purpose: Safari on iOS has never shipped the
    Vibration API, so the "logged" moment has to land visually. */
 
-/* The checkbox pulses instead of snapping, so logging a habit registers. */
+/* A ticked box pulses instead of snapping, so the tap registers. */
 @keyframes boxpulse{
-  0%  {transform:scale(1);   box-shadow:0 0 14px -4px var(--c)}
-  40% {transform:scale(1.13);box-shadow:0 0 22px 1px var(--c)}
-  100%{transform:scale(1);   box-shadow:0 0 14px -4px var(--c)}
+  0%  {transform:scale(1);   box-shadow:0 0 10px -4px var(--c,var(--personal))}
+  40% {transform:scale(1.16);box-shadow:0 0 18px 1px var(--c,var(--personal))}
+  100%{transform:scale(1);   box-shadow:0 0 10px -4px var(--c,var(--personal))}
 }
-.box.pulse{animation:boxpulse .34s ease-out}
-
-/* The streak digit rolls up rather than swapping in place. */
-@keyframes snumtick{
-  0%  {transform:translateY(7px);opacity:0}
-  60% {transform:translateY(-2px);opacity:1}
-  100%{transform:translateY(0);opacity:1}
-}
-.snum.tick{animation:snumtick .3s ease-out}
+.cbox.pulse{animation:boxpulse .34s ease-out}
 
 /* Day cells answer on the way down, not on release. */
 .day{transition:background .08s linear,border-color .08s linear}
@@ -318,7 +315,7 @@ body.boot header .sub{animation:bootfade .34s .26s both}
 body::before{animation:drift 7s linear infinite}
 
 @media (prefers-reduced-motion:reduce){
-  .box.pulse,.snum.tick,body.boot h1,body.boot header .sub,body::before{animation:none}
+  .cbox.pulse,body.boot h1,body.boot header .sub,body::before{animation:none}
   .day{transition:none}
 }
 </style>
@@ -331,16 +328,52 @@ body::before{animation:drift 7s linear infinite}
     <div class="sub" id="hdrsub"></div>
   </header>
 
-  <!-- QUICK ADD -->
-  <section class="panel" style="--c:var(--work)">
-    <div class="phead"><i class="tick" style="--c:var(--work)"></i><h2>Quick Add</h2></div>
-    <div class="pbody qa">
-      <input id="qaInput" type="text" placeholder="dentist thursday 2pm"
-             autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
-      <a class="btn" id="qaBtn" style="--c:var(--work)" href="#">Send to Calendar</a>
-      <a class="btn" id="scanBtn" style="--c:var(--cheer)" href="#">Scan a Schedule</a>
-      <div class="hint" id="qaHint">One sentence goes to <b>Grid Quick Add</b>. A photo of a schedule goes to <b>Grid Scan</b>, which reads every shift at once. Both show you what they found before writing anything.</div>
+  <!-- TODAY -->
+  <section class="panel today" style="--c:var(--work)">
+    <div class="pbody">
+      <div class="tdate">
+        <div class="tdnum" id="tNum">1</div>
+        <div class="tdmeta">
+          <div class="tdow" id="tDow">MONDAY</div>
+          <div class="tmon" id="tMon">AUG 2026</div>
+          <div class="tbar"><i id="tBar"></i></div>
+        </div>
+      </div>
+      <div class="tcols">
+        <div class="tcol">
+          <div class="ssec">Schedule</div>
+          <div id="tEvents"></div>
+        </div>
+        <div class="tcol">
+          <div class="ssec">To-do</div>
+          <div id="tTodos"></div>
+        </div>
+      </div>
     </div>
+  </section>
+
+  <!-- MONTH -->
+  <section class="panel" style="--c:var(--classes)">
+    <div class="phead"><i class="tick" style="--c:var(--classes)"></i><h2 id="calTitle" role="button" tabindex="0" style="cursor:pointer">Month</h2>
+      <span class="lbl" style="margin-left:auto;color:var(--dimmer)">tap for today</span></div>
+    <div class="pbody">
+      <div class="calhead">
+        <span class="lbl" id="calSummary"></span>
+        <div class="calnav">
+          <button id="calPrev" aria-label="previous month">&lt;</button>
+          <button id="calNext" aria-label="next month">&gt;</button>
+        </div>
+      </div>
+      <div class="cal" id="cal"></div>
+      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Dots = days with something on the list.</div>
+      <div class="sheet" id="daySheet" hidden></div>
+    </div>
+  </section>
+
+  <!-- SUNDAY RESET -->
+  <section class="panel" style="--c:var(--personal)">
+    <div class="phead"><i class="tick" style="--c:var(--personal)"></i><h2>Sunday Reset</h2></div>
+    <div class="pbody" id="reset"></div>
   </section>
 
   <!-- TO-DO -->
@@ -367,68 +400,15 @@ body::before{animation:drift 7s linear infinite}
     </div>
   </section>
 
-  <!-- HABITS -->
-  <section class="panel" style="--c:var(--habits)">
-    <div class="phead"><i class="tick" style="--c:var(--habits)"></i><h2>Streaks</h2></div>
-    <div class="pbody" id="habits"></div>
-  </section>
-
-  <!-- CHEER -->
-  <section class="panel" style="--c:var(--cheer)">
-    <div class="phead"><i class="tick" style="--c:var(--cheer)"></i><h2>Cheer</h2></div>
-    <div class="stats">
-      <div class="stat" style="--c:var(--cheer)">
-        <div class="snum2" id="cheerCount">0</div>
-        <div class="slbl">Season logged</div>
-      </div>
-      <div class="stat" style="--c:var(--cheer)">
-        <div class="snum2" id="cheerDays">—</div>
-        <div class="slbl" id="cheerDaysLbl">Next event</div>
-      </div>
-    </div>
-    <div class="pbody">
-      <a class="btn" id="cheerLog" style="--c:var(--cheer)" href="#">Log Attendance</a>
-      <div class="field" style="margin-top:10px">
-        <span class="lbl">Next event</span>
-        <input id="cheerName" type="text" placeholder="home game" maxlength="28">
-      </div>
-      <div class="field">
-        <span class="lbl">Date</span>
-        <input id="cheerDate" type="date">
-      </div>
-    </div>
-  </section>
-
-  <!-- MONTH -->
-  <section class="panel" style="--c:var(--classes)">
-    <div class="phead"><i class="tick" style="--c:var(--classes)"></i><h2 id="calTitle" role="button" tabindex="0" style="cursor:pointer">Month</h2>
-      <span class="lbl" style="margin-left:auto;color:var(--dimmer)">tap for today</span></div>
-    <div class="pbody">
-      <div class="calhead">
-        <span class="lbl" id="calSummary"></span>
-        <div class="calnav">
-          <button id="calPrev" aria-label="previous month">&lt;</button>
-          <button id="calNext" aria-label="next month">&gt;</button>
-        </div>
-      </div>
-      <div class="cal" id="cal"></div>
-      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Dots = what you logged.</div>
-      <div class="sheet" id="daySheet" hidden></div>
-    </div>
-  </section>
-
-  <!-- SUNDAY RESET -->
-  <section class="panel" style="--c:var(--personal)">
-    <div class="phead"><i class="tick" style="--c:var(--personal)"></i><h2>Sunday Reset</h2></div>
-    <div class="pbody" id="reset"></div>
-  </section>
-
-  <!-- CLASS DAYS -->
-  <section class="panel" style="--c:var(--classes)">
-    <div class="phead"><i class="tick" style="--c:var(--classes)"></i><h2>Class Days</h2></div>
-    <div class="pbody">
-      <div class="hint" style="margin-bottom:9px">Days you have class. Attendance streak ignores the rest.</div>
-      <div class="days" id="classDays"></div>
+  <!-- QUICK ADD -->
+  <section class="panel" style="--c:var(--work)">
+    <div class="phead"><i class="tick" style="--c:var(--work)"></i><h2>Quick Add</h2></div>
+    <div class="pbody qa">
+      <input id="qaInput" type="text" placeholder="dentist thursday 2pm"
+             autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
+      <a class="btn" id="qaBtn" style="--c:var(--work)" href="#">Send to Calendar</a>
+      <a class="btn" id="scanBtn" style="--c:var(--cheer)" href="#">Scan a Schedule</a>
+      <div class="hint" id="qaHint">One sentence goes to <b>Grid Quick Add</b>. A photo of a schedule goes to <b>Grid Scan</b>, which reads every shift at once. Both show you what they found before writing anything.</div>
     </div>
   </section>
 
@@ -464,11 +444,10 @@ body::before{animation:drift 7s linear infinite}
 /* ============ storage ============ */
 const KEY = "grid.v1";
 const DEFAULT = {
-  habits: {
-    attendance: { name:"Class Attendance", color:"--classes", dates:{}, scheduled:[1,2,3,4,5] },
-    meditation: { name:"Meditation",       color:"--habits",  dates:{}, scheduled:null },
-    learning:   { name:"Learning",         color:"--work",    dates:{}, scheduled:null, renamable:true }
-  },
+  // Habit and cheer tracking was removed from the interface. The keys stay in
+  // the default so a phone carrying months of logged days merges cleanly
+  // rather than having them stripped on the first save — nothing reads them.
+  habits: {},
   cheer: { dates:{}, nextName:"", nextDate:"" },
   // A repeating item is stored once as a pattern and projected onto each
   // matching day at render time. Materialising a row per week would mean
@@ -482,11 +461,10 @@ const DEFAULT = {
   // calendar can mark which days still have something open.
   todos: {}
 };
-const HABIT_ORDER = ["attendance","meditation","learning"];
 const RESET_ITEMS = [
   "Pull next week's shifts from GroupMe → Work calendar",
   "Check the cheer schedule for the week",
-  "Review the week's streaks"
+  "Clear anything still rolling over on the to-do list"
 ];
 
 let S = load();
@@ -523,7 +501,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v15";
+const APP_VERSION = "v16";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -605,7 +583,7 @@ async function drainInbox(){
     added++;
   }
   if(added || flipped){
-    save(); renderTodos(); renderCal(); if(sheetDate) renderSheet();
+    save(); renderToday(); renderTodos(); renderCal(); renderSheet();
     if(added) toast(added === 1 ? "1 item from Siri" : added+" items from Siri");
   }
   try{
@@ -725,53 +703,16 @@ function today(){ const n=new Date(); return new Date(n.getFullYear(),n.getMonth
 function sundayOf(d){ return addDays(d, -d.getDay()); }
 const MON = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
-/* ============ streak logic ============
-   Stored as a set of date keys, so any past day is editable and a streak can
-   be repaired. A day the habit isn't scheduled for is skipped entirely — it
-   neither extends nor breaks. Today is given grace: an unchecked today does
-   not break the streak, because the day isn't over.
-==================================================================== */
-function isScheduled(h, d){ return !h.scheduled || h.scheduled.includes(d.getDay()); }
-
-function currentStreak(h){
-  const t = today();
-  let cur = t;
-  // grace: skip today if it's scheduled but not yet done
-  if(isScheduled(h,cur) && !h.dates[ymd(cur)]) cur = addDays(cur,-1);
-  let n = 0, guard = 0;
-  while(guard++ < 3660){
-    if(!isScheduled(h,cur)){ cur = addDays(cur,-1); continue; }
-    if(h.dates[ymd(cur)]){ n++; cur = addDays(cur,-1); }
-    else break;
-  }
-  return n;
-}
-function bestStreak(h){
-  const keys = Object.keys(h.dates).filter(k=>h.dates[k]).sort();
-  if(!keys.length) return 0;
-  let best=0, run=0, cur=parseYmd(keys[0]);
-  const end = today();
-  let guard=0;
-  while(cur <= end && guard++ < 3660){
-    if(isScheduled(h,cur)){
-      if(h.dates[ymd(cur)]) { run++; if(run>best) best=run; }
-      else run = 0;
-    }
-    cur = addDays(cur,1);
-  }
-  return Math.max(best, currentStreak(h));
-}
-
 /* ============ render ============ */
 const $ = s => document.querySelector(s);
 let calMonth = today().getMonth(), calYear = today().getFullYear();
 
-function render(){ renderHeader(); renderTodos(); renderHabits(); renderCheer(); renderCal(); renderSheet(); renderReset(); renderClassDays(); }
+function render(){ renderHeader(); renderToday(); renderTodos(); renderCal(); renderSheet(); renderReset(); }
 
+// The date moved into the Today box, which says it far more loudly. All the
+// header still owes is which build a phone is actually running.
 function renderHeader(){
-  const t = today();
-  const dow = t.toLocaleDateString(undefined,{weekday:"long"});
-  $("#hdrsub").innerHTML = dow+"<br>"+MON[t.getMonth()].slice(0,3)+" "+t.getDate()+" "+t.getFullYear()+"<br>"+APP_VERSION;
+  $("#hdrsub").textContent = APP_VERSION;
 }
 
 /* The panel shows one day at a time. tdDate is view state, not saved state —
@@ -787,6 +728,42 @@ function dayLabel(k){
   if(k === ymd(addDays(t,1)))  return "Tomorrow";
   if(k === ymd(addDays(t,-1))) return "Yesterday";
   return parseYmd(k).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"});
+}
+
+/* The box at the top mirrors the widget deliberately: the same two lists in
+   the same order, so glancing at the home screen and opening the app don't
+   disagree about what today looks like. */
+function renderToday(){
+  const t = today(), key = ymd(t);
+  $("#tNum").textContent = t.getDate();
+  $("#tDow").textContent = t.toLocaleDateString(undefined,{weekday:"long"}).toUpperCase();
+  $("#tMon").textContent = (MON[t.getMonth()]+" "+t.getFullYear()).toUpperCase();
+  const now = new Date();
+  $("#tBar").style.width = ((now.getHours()*60 + now.getMinutes())/1440*100).toFixed(1)+"%";
+
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  const evs = eventsOn(key);
+  $("#tEvents").innerHTML = evs.length
+    ? evs.slice(0,5).map(e => `<div class="trow${!e.allDay && e.e <= nowMin ? " past" : ""}">
+        <i class="tdotc" style="--c:var(${calColor(e.cal)})"></i>
+        <span class="tt">${esc(e.t)}</span>
+        <span class="th">${e.allDay ? "ALL DAY" : hhmm(e.s)}</span>
+      </div>`).join("") + (evs.length > 5 ? `<div class="tnone">+${evs.length-5} more</div>` : "")
+    : `<div class="tnone">${EV.syncedAt ? "Nothing on the calendar." : "No calendar synced yet."}</div>`;
+
+  // Same rollover rule as the list below, so an item that has been waiting a
+  // week is visible here too rather than only on the day it was written.
+  const open = overdueFor(key).map(x => ({ t:x.t, late:true }))
+    .concat(repeatsFor(key).filter(r => !repeatDone(key,r.id)).map(r => ({ t:r.t, wk:true })))
+    .concat((S.todos[key] || []).filter(x => !x.done).map(x => ({ t:x.t })));
+  $("#tTodos").innerHTML = open.length
+    ? open.slice(0,5).map(x => `<div class="trow">
+        <i class="tdotc" style="--c:var(${x.late ? "--cheer" : "--habits"})"></i>
+        <span class="tt">${esc(x.t)}</span>
+        ${x.late ? `<span class="th" style="color:var(--cheer)">LATE</span>`
+                 : x.wk ? `<span class="th">WKLY</span>` : ""}
+      </div>`).join("") + (open.length > 5 ? `<div class="tnone">+${open.length-5} more</div>` : "")
+    : `<div class="tnone">Nothing left today.</div>`;
 }
 
 /* An id is unique across every day, so a row in the overdue group can be
@@ -831,11 +808,16 @@ function todoRow(x, opts){
   const tag = o.from ? `<span class="tdwhen">${esc(dayLabel(o.from))}</span>`
             : o.rep  ? `<span class="tdrep">${esc(o.rep)}</span>` : "";
   const attr = o.repeatId ? `data-rep="${o.repeatId}"` : `data-todo="${x.id}"`;
+  // The day sheet's column is barely 130px wide on a phone. Ticking fits
+  // there; a date picker and three buttons do not, so moving and deleting
+  // stay in the To-Do panel, which has the full width.
+  const more = o.compact ? ""
+    : `<button class="tdmore" data-more="${o.repeatId || x.id}" aria-label="item actions">&middot;&middot;&middot;</button>`;
   return `<div class="td" aria-checked="${!!x.done}">
       <span class="cbox" ${attr} role="checkbox" aria-checked="${!!x.done}" tabindex="0"></span>
       <span class="ctxt" ${attr}>${esc(x.t)}${tag}</span>
-      <button class="tdmore" data-more="${o.repeatId || x.id}" aria-label="item actions">&middot;&middot;&middot;</button>
-    </div>` + actionsRow(o.repeatId || x.id, !!o.repeatId);
+      ${more}
+    </div>` + (o.compact ? "" : actionsRow(o.repeatId || x.id, !!o.repeatId));
 }
 
 /* Revealed under one row at a time. A menu that lives in the list beats a
@@ -856,6 +838,21 @@ function actionsRow(id, isRepeat){
   </div>`;
 }
 
+/* Rolled over, weekly, then filed under the day itself. Shared with the day
+   sheet so both draw the same rows from the same rules. */
+function todoGroups(key, compact){
+  const list = S.todos[key] || [], late = overdueFor(key), reps = repeatsFor(key);
+  const groups = [];
+  if(late.length) groups.push(["Rolled over", " late",
+    late.map(x => todoRow(x, { from:x.from, compact })).join("")]);
+  if(reps.length) groups.push(["Every week", "",
+    reps.map(r => todoRow({ id:r.id, t:r.t, done:repeatDone(key,r.id) },
+                          { repeatId:r.id, rep:dowSummary(r.dows), compact })).join("")]);
+  if(list.length) groups.push(["This day", "",
+    list.map(x => todoRow(x, { compact })).join("")]);
+  return groups;
+}
+
 function renderTodos(){
   const key = tdDate;
   const list = S.todos[key] || [];
@@ -865,15 +862,7 @@ function renderTodos(){
 
   // Headers only earn their space when there's more than one group to tell
   // apart — a lone list under a "This day" caption is just noise.
-  const groups = [];
-  if(late.length) groups.push(["Rolled over", " late",
-    late.map(x => todoRow(x, { from:x.from })).join("")]);
-  if(reps.length) groups.push(["Every week", "",
-    reps.map(r => todoRow({ id:r.id, t:r.t, done:repeatDone(key,r.id) },
-                          { repeatId:r.id, rep:dowSummary(r.dows) })).join("")]);
-  if(list.length) groups.push(["This day", "",
-    list.map(x => todoRow(x, {})).join("")]);
-
+  const groups = todoGroups(key);
   const html = groups.map(([name, cls, rows]) =>
     (groups.length > 1 ? `<div class="tdgrp${cls}">${name}</div>` : "") + rows).join("");
   $("#todos").innerHTML = html || `<div class="tdempty">Nothing on this day's list.</div>`;
@@ -900,44 +889,6 @@ function addRepeat(text, dows){
   return true;
 }
 
-function renderHabits(){
-  const t = today(), tk = ymd(t);
-  $("#habits").innerHTML = HABIT_ORDER.map(id=>{
-    const h = S.habits[id];
-    const sched = isScheduled(h,t);
-    const on = !!h.dates[tk];
-    const cur = currentStreak(h), best = bestStreak(h);
-    return `<div class="habit" style="--c:var(${h.color})">
-      <div class="box ${sched?"":"na"}" data-habit="${id}" role="checkbox"
-           aria-checked="${on}" tabindex="0" ${sched?"":'aria-disabled="true"'}></div>
-      <div class="hmeta">
-        <div class="hname">${esc(h.name)}${h.renamable?' <span class="edit" data-rename="'+id+'">edit</span>':""}</div>
-        <div class="hsub">${sched?(on?"Logged today":"Not yet today"):'<span class="off">No class scheduled today</span>'}</div>
-      </div>
-      <div class="streak">
-        <div class="snum" data-snum="${id}">${cur}</div>
-        <div class="sbest">Best ${best}</div>
-      </div>
-    </div>`;
-  }).join("");
-}
-
-function renderCheer(){
-  $("#cheerCount").textContent = Object.values(S.cheer.dates).filter(Boolean).length;
-  $("#cheerName").value = S.cheer.nextName || "";
-  $("#cheerDate").value = S.cheer.nextDate || "";
-  const el = $("#cheerDays"), lbl = $("#cheerDaysLbl");
-  if(S.cheer.nextDate){
-    const diff = Math.round((parseYmd(S.cheer.nextDate) - today())/86400000);
-    el.textContent = diff < 0 ? "—" : diff;
-    lbl.textContent = diff < 0 ? "Event passed"
-                    : diff === 0 ? "Today"
-                    : diff === 1 ? "Day away" : "Days away";
-  } else {
-    el.textContent = "—"; lbl.textContent = "No event set";
-  }
-}
-
 function renderCal(){
   $("#calTitle").textContent = MON[calMonth]+" "+calYear;
   const first = new Date(calYear, calMonth, 1);
@@ -946,23 +897,20 @@ function renderCal(){
   const tk    = ymd(today());
   let html = ["S","M","T","W","T","F","S"].map(d=>`<div class="dow">${d}</div>`).join("");
   for(let i=0;i<lead;i++) html += `<div class="day pad"></div>`;
-  let logged = 0;
+  let marked = 0;
   for(let d=1; d<=days; d++){
     const key = ymd(new Date(calYear, calMonth, d));
-    const dots = HABIT_ORDER.filter(id=>S.habits[id].dates[key])
-      .map(id=>`<i class="dot" style="--c:var(${S.habits[id].color})"></i>`).join("")
-      + (S.cheer.dates[key] ? `<i class="dot" style="--c:var(--cheer)"></i>` : "");
-    if(dots) logged++;
-    // An open to-do is a reminder, not a log — it must not inflate the
-    // "active days" count, so it is appended after that tally.
     const openTodo = (S.todos[key] || []).some(x => !x.done)
                   || repeatsFor(key).some(r => !repeatDone(key, r.id));
+    const busy = eventsOn(key).length;
+    if(openTodo) marked++;
     html += `<div class="day ${key===tk?"today":""}${key===sheetDate?" open":""}" data-day="${key}">
-      <span>${d}</span><span class="dots">${dots}${
+      <span>${d}</span><span class="dots">${
+        busy ? `<i class="dot" style="--c:var(--work)"></i>` : ""}${
         openTodo ? `<i class="dot" style="--c:var(--habits)"></i>` : ""}</span></div>`;
   }
   $("#cal").innerHTML = html;
-  $("#calSummary").textContent = logged+" active days";
+  $("#calSummary").textContent = marked ? marked+" days with something open" : "nothing outstanding";
 }
 
 function renderReset(){
@@ -974,65 +922,29 @@ function renderReset(){
   ).join("") + `<div class="hint" style="margin-top:10px">Clears itself every Sunday.</div>`;
 }
 
-function renderClassDays(){
-  const sel = S.habits.attendance.scheduled || [];
-  $("#classDays").innerHTML = ["S","M","T","W","T","F","S"].map((d,i)=>
-    `<button data-cday="${i}" aria-pressed="${sel.includes(i)}">${d}</button>`).join("");
-}
-
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-/* renderHabits() rebuilds the row, so the animation has to be applied to the
-   fresh element afterwards. Toggling the class off and forcing a reflow lets
-   the same animation replay on a rapid second tap. */
+/* The list is rebuilt on every toggle, so the animation has to be applied to
+   the fresh element afterwards. Removing the class and forcing a reflow lets
+   it replay on a rapid second tap. */
 function restartAnim(el, cls){
   if(!el) return;
   el.classList.remove(cls);
   void el.offsetWidth;
   el.classList.add(cls);
 }
-function flashLogged(id, streakGrew){
-  restartAnim(document.querySelector(`[data-habit="${id}"]`), "pulse");
-  if(streakGrew) restartAnim(document.querySelector(`[data-snum="${id}"]`), "tick");
+// Only celebrate ticking something off, never un-ticking it.
+function flashTodo(id, on){
+  if(on) restartAnim(document.querySelector(`.cbox[data-todo="${id}"], .cbox[data-rep="${id}"]`), "pulse");
 }
 
 /* ============ interaction ============ */
 document.addEventListener("click", e => {
-  const box = e.target.closest("[data-habit]");
-  if(box && !box.classList.contains("na")){
-    const id = box.dataset.habit;
-    const h = S.habits[id], k = ymd(today());
-    const wasStreak = currentStreak(h);
-    const turningOn = !h.dates[k];
-    if(h.dates[k]) delete h.dates[k]; else h.dates[k] = true;
-    save(); renderHabits(); renderCal();
-    // Only celebrate logging, not un-logging.
-    if(turningOn) flashLogged(id, currentStreak(h) > wasStreak);
-    return;
-  }
-  const ren = e.target.closest("[data-rename]");
-  if(ren){
-    const h = S.habits[ren.dataset.rename];
-    const v = prompt("Name this slot", h.name);
-    if(v && v.trim()){ h.name = v.trim().slice(0,24); save(); renderHabits(); }
-    return;
-  }
   const chk = e.target.closest("[data-reset]");
   if(chk){
     const i = +chk.dataset.reset;
     S.reset.done[i] = !S.reset.done[i];
     save(); renderReset();
-    return;
-  }
-  const cd = e.target.closest("[data-cday]");
-  if(cd){
-    const i = +cd.dataset.cday;
-    const a = S.habits.attendance;
-    a.scheduled = a.scheduled || [];
-    const at = a.scheduled.indexOf(i);
-    if(at >= 0) a.scheduled.splice(at,1); else a.scheduled.push(i);
-    a.scheduled.sort();
-    save(); renderClassDays(); renderHabits();
     return;
   }
   const tdel = e.target.closest("[data-tdel]");
@@ -1043,7 +955,7 @@ document.addEventListener("click", e => {
       if(!S.todos[hit.key].length) delete S.todos[hit.key];
     }
     tdOpen = null;
-    save(); renderTodos(); renderCal();
+    save(); renderToday(); renderTodos(); renderCal(); renderSheet();
     return;
   }
   const repdel = e.target.closest("[data-repdel]");
@@ -1053,7 +965,7 @@ document.addEventListener("click", e => {
     // Leave the per-day completions behind rather than walking every date to
     // clear them — they're keyed by an id nothing projects any more.
     tdOpen = null;
-    save(); renderTodos(); renderCal();
+    save(); renderToday(); renderTodos(); renderCal(); renderSheet();
     return;
   }
   const mv = e.target.closest("[data-mv]");
@@ -1071,15 +983,21 @@ document.addEventListener("click", e => {
   const rep = e.target.closest("[data-rep]");
   if(rep){
     const id = rep.dataset.rep, day = S.repeatDone[tdDate] = S.repeatDone[tdDate] || {};
+    const on = !day[id];
     if(day[id]) delete day[id]; else day[id] = true;
     if(!Object.keys(day).length) delete S.repeatDone[tdDate];
-    save(); renderTodos(); renderCal();
+    save(); renderToday(); renderTodos(); renderCal(); renderSheet();
+    flashTodo(id, on);
     return;
   }
   const td = e.target.closest("[data-todo]");
   if(td){
     const hit = findTodo(td.dataset.todo);
-    if(hit){ hit.item.done = !hit.item.done; save(); renderTodos(); renderCal(); }
+    if(hit){
+      hit.item.done = !hit.item.done;
+      save(); renderToday(); renderTodos(); renderCal(); renderSheet();
+      flashTodo(hit.item.id, hit.item.done);
+    }
     return;
   }
   const tdow = e.target.closest("[data-tdow]");
@@ -1087,18 +1005,6 @@ document.addEventListener("click", e => {
     const i = +tdow.dataset.tdow, at = newRepeatDows.indexOf(i);
     if(at >= 0) newRepeatDows.splice(at,1); else newRepeatDows.push(i);
     renderTodos();
-    return;
-  }
-  const shab = e.target.closest("[data-shabit]");
-  if(shab){
-    const h = S.habits[shab.dataset.shabit];
-    if(h.dates[sheetDate]) delete h.dates[sheetDate]; else h.dates[sheetDate] = true;
-    save(); render();
-    return;
-  }
-  if(e.target.closest("[data-scheer]")){
-    if(S.cheer.dates[sheetDate]) delete S.cheer.dates[sheetDate]; else S.cheer.dates[sheetDate] = true;
-    save(); render();
     return;
   }
   if(e.target.closest("#sheetClose")){ closeSheet(); return; }
@@ -1116,7 +1022,7 @@ function submitTodo(){
   if(!ok) return;
   tdInput.value = "";
   newRepeatDows = [];
-  save(); renderTodos(); renderCal();
+  save(); renderToday(); renderTodos(); renderCal(); renderSheet();
 }
 tdInput.addEventListener("keydown", e => {
   if(e.key !== "Enter") return;
@@ -1136,7 +1042,7 @@ function moveTodo(id, key){
   if(!S.todos[hit.key].length) delete S.todos[hit.key];
   (S.todos[key] = S.todos[key] || []).push(item);
   tdOpen = null;
-  save(); renderTodos(); renderCal();
+  save(); renderToday(); renderTodos(); renderCal(); renderSheet();
   toast("Moved to "+dayLabel(key).toLowerCase());
 }
 document.addEventListener("change", e => {
@@ -1238,15 +1144,12 @@ function renderSheet(){
   const labels = Array.from({length:rows}, (_,i) =>
     `<span style="height:${HOUR_PX}px">${hhmm((from+i)*60)}</span>`).join("");
 
-  const dayTodos = (S.todos[key] || []).filter(x => !x.done).length
-                 + repeatsFor(key).filter(r => !repeatDone(key,r.id)).length;
-
-  const habits = HABIT_ORDER.map(id => {
-    const h = S.habits[id], on = !!h.dates[key], sched = isScheduled(h,d);
-    return `<button style="--c:var(${h.color})" data-shabit="${id}" aria-pressed="${on}"
-      ${sched?"":"disabled"}>${esc(h.name)}</button>`;
-  }).join("") + `<button style="--c:var(--cheer)" data-scheer="1"
-      aria-pressed="${!!S.cheer.dates[key]}">Cheer</button>`;
+  // Live rows, not a count: the sheet is where you are already looking at that
+  // day, so ticking something off shouldn't mean scrolling back to the panel.
+  const gs = todoGroups(key, true);
+  const dayList = gs.map(([name, cls, rowsHtml]) =>
+      (gs.length > 1 ? `<div class="tdgrp${cls}">${name}</div>` : "") + rowsHtml).join("")
+    || `<div class="sempty">Nothing on the list.</div>`;
 
   $("#daySheet").hidden = false;
   $("#daySheet").innerHTML = `
@@ -1257,20 +1160,23 @@ function renderSheet(){
     ${allDay.length ? `<div class="ssec">All day</div><div class="allday">`
       + allDay.map(e => `<span style="--c:var(${calColor(e.cal)})">${esc(e.t)}</span>`).join("")
       + `</div>` : ""}
-    <div class="ssec">Schedule${EV.syncedAt ? "" : " — no calendar synced yet"}</div>
-    <div class="hours">
-      <div class="hrlab">${labels}</div>
-      <div class="lane" style="--hr:${HOUR_PX}px;height:${rows*HOUR_PX}px">
-        ${blocks}
-        ${showNow ? `<div class="nowline" style="top:${((nowMin-from*60)/60*HOUR_PX).toFixed(1)}px"></div>` : ""}
+    <div class="scols">
+      <div>
+        <div class="ssec">Anytime</div>
+        ${dayList}
       </div>
-    </div>
-    ${timed.length ? "" : `<div class="sempty" style="margin-top:6px">No events on this day.</div>`}
-    <div class="ssec">Anytime</div>
-    <div class="sempty">${dayTodos ? dayTodos+(dayTodos===1?" open to-do":" open to-dos")+" — in the To-Do panel above"
-                                   : "Nothing on the to-do list."}</div>
-    <div class="ssec">Logged</div>
-    <div class="shabits">${habits}</div>`;
+      <div>
+        <div class="ssec">Schedule${EV.syncedAt ? "" : " — not synced"}</div>
+        <div class="hours">
+          <div class="hrlab">${labels}</div>
+          <div class="lane" style="--hr:${HOUR_PX}px;height:${rows*HOUR_PX}px">
+            ${blocks}
+            ${showNow ? `<div class="nowline" style="top:${((nowMin-from*60)/60*HOUR_PX).toFixed(1)}px"></div>` : ""}
+          </div>
+        </div>
+        ${timed.length ? "" : `<div class="sempty" style="margin-top:6px">No events.</div>`}
+      </div>
+    </div>`;
 }
 
 $("#calPrev").onclick = ()=>{ if(--calMonth < 0){ calMonth=11; calYear--; } renderCal(); };
@@ -1283,15 +1189,6 @@ $("#calTitle").onclick = ()=>{
   renderCal(); renderTodos();
 };
 
-$("#cheerLog").addEventListener("click", e => {
-  e.preventDefault();
-  const k = ymd(today());
-  if(S.cheer.dates[k]){ delete S.cheer.dates[k]; toast("Today's cheer log removed"); }
-  else { S.cheer.dates[k]=true; toast("Cheer logged"); }
-  save(); renderCheer(); renderCal();
-});
-$("#cheerName").addEventListener("change", e => { S.cheer.nextName = e.target.value.trim(); save(); renderCheer(); });
-$("#cheerDate").addEventListener("change", e => { S.cheer.nextDate = e.target.value; save(); renderCheer(); });
 
 /* ============ quick add ============
    The web app deliberately does NOT parse. It hands the raw sentence to the

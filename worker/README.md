@@ -21,8 +21,12 @@ on it — if this is down, Grid works exactly as it does today.
 | GET    | `/events`    | bearer | returns `{syncedAt, events}` for the app's day view |
 | POST   | `/todo/toggle` | bearer | `{id, ymd?}` from a widget tap; flips the item and queues the same flip for the app |
 
-A `scheduled` cron (`*/30 * * * *`) checks the evening habit nag once `TIMEZONE`
-(an IANA name, e.g. `America/Denver`) is set as a var — without it, it no-ops.
+A `scheduled` cron (`*/30 * * * *`) runs the evening to-do nag and the Sunday
+Reset nudge once `TIMEZONE` (an IANA name, e.g. `America/Denver`) is set as a
+var — without it, it no-ops. The nag applies the app's own rollover rule, so an
+item left over from an earlier day still counts as open, and it names that item
+rather than reporting a count: the carried-over one is the one most likely to
+keep being ignored.
 
 Auth header: `Authorization: Bearer <GRID_TOKEN>`. Anything else is `401`.
 The body must be a JSON object — arrays, scalars and `null` are rejected `400`

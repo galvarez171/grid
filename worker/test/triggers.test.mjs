@@ -3,15 +3,15 @@
  *   node --test test/
  *
  * These cover the parts that are easy to get quietly wrong: DST-safe date
- * math, the streak grace rule, the every-30-min dedup, and the habit that is
- * scheduled for no day at all (which loops forever without a guard).
+ * math, the rollover rule (an unfinished item is still open days later), the
+ * projection of a weekly repeat, and the every-30-min dedup.
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  addDaysYmd, dayOfWeek, localParts, isScheduled,
-  currentStreak, habitsUndone, resetIncomplete, decideNotifications
+  addDaysYmd, dayOfWeek, localParts,
+  openTodos, resetIncomplete, decideNotifications
 } from "../src/triggers.mjs";
 
 const TZ = "America/Chicago";
@@ -64,182 +64,110 @@ test("localParts respects the CST/CDT offset change", () => {
   assert.equal(localParts(new Date("2026-12-22T15:00:00Z"), TZ).hour, 9);
 });
 
-/* ---------- scheduling ---------- */
+/* ---------- open to-dos ---------- */
 
-test("isScheduled treats a missing schedule as every day", () => {
-  assert.equal(isScheduled({}, 0), true);
-  assert.equal(isScheduled({ scheduled: null }, 3), true);
+const item = (t, done) => ({ id: t, t, done: !!done });
+
+test("openTodos carries unfinished items forward from earlier days", () => {
+  const state = { todos: { "2026-08-20": [item("library")], "2026-08-22": [item("poster board")] } };
+  assert.deepEqual(openTodos(state, "2026-08-22"),
+    [{ t: "library", late: true }, { t: "poster board", late: false }]);
 });
 
-test("isScheduled treats an empty schedule as no day", () => {
-  // `!h.scheduled` is false for [], so this must fall through to includes().
-  assert.equal(isScheduled({ scheduled: [] }, 0), false);
-  assert.equal(isScheduled({ scheduled: [1, 2, 3, 4, 5] }, 6), false);
-  assert.equal(isScheduled({ scheduled: [1, 2, 3, 4, 5] }, 1), true);
-});
-
-/* ---------- streaks ---------- */
-
-const daily = dates => ({ name: "Meditation", scheduled: null, dates });
-const logged = (...days) => Object.fromEntries(days.map(d => [d, true]));
-
-test("currentStreak gives today grace when not yet logged", () => {
-  // Sat 22nd unlogged, the five days before it logged -> streak is 5, not 0.
-  const h = daily(logged("2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21"));
-  assert.equal(currentStreak(h, "2026-08-22"), 5);
-});
-
-test("currentStreak counts today once logged", () => {
-  const h = daily(logged("2026-08-21", "2026-08-22"));
-  assert.equal(currentStreak(h, "2026-08-22"), 2);
-});
-
-test("currentStreak breaks on a missed scheduled day", () => {
-  const h = daily(logged("2026-08-18", "2026-08-21")); // 19th/20th missed
-  assert.equal(currentStreak(h, "2026-08-22"), 1);
-});
-
-test("currentStreak skips unscheduled days without breaking", () => {
-  // Weekdays only; the weekend gap must not break the streak.
-  const h = {
-    name: "Class Attendance", scheduled: [1, 2, 3, 4, 5],
-    dates: logged("2026-08-20", "2026-08-21", "2026-08-24") // Thu, Fri, Mon
-  };
-  assert.equal(currentStreak(h, "2026-08-24"), 3);
-});
-
-test("currentStreak terminates on a habit scheduled for no day", () => {
-  // Without the guard counter this never exits.
-  const h = { name: "Nothing", scheduled: [], dates: {} };
-  assert.equal(currentStreak(h, "2026-08-22"), 0);
-});
-
-test("currentStreak tolerates a missing dates map", () => {
-  assert.equal(currentStreak({ name: "X", scheduled: null }, "2026-08-22"), 0);
-});
-
-/* ---------- undone habits ---------- */
-
-test("habitsUndone ignores habits not scheduled today", () => {
+test("openTodos ignores finished items and future days", () => {
   const state = {
-    habits: {
-      attendance: { name: "Class Attendance", scheduled: [1, 2, 3, 4, 5], dates: {} },
-      meditation: { name: "Meditation", scheduled: null, dates: {} }
+    todos: {
+      "2026-08-20": [item("done one", true)],
+      "2026-08-22": [item("today")],
+      "2026-08-30": [item("next week")]
     }
   };
-  // 2026-08-22 is a Saturday: attendance isn't scheduled, meditation is.
-  const undone = habitsUndone(state, "2026-08-22");
-  assert.deepEqual(undone.map(h => h.name), ["Meditation"]);
+  assert.deepEqual(openTodos(state, "2026-08-22").map(x => x.t), ["today"]);
 });
 
-test("habitsUndone returns nothing once everything is logged", () => {
-  const state = { habits: { meditation: daily(logged("2026-08-22")) } };
-  assert.equal(habitsUndone(state, "2026-08-22").length, 0);
+test("openTodos projects a repeat onto the days it matches", () => {
+  // 2026-08-22 is a Saturday, 2026-08-24 a Monday.
+  const state = { repeats: [{ id: "r1", t: "cheer practice", dows: [1], from: "2026-08-01" }] };
+  assert.deepEqual(openTodos(state, "2026-08-22"), []);
+  assert.deepEqual(openTodos(state, "2026-08-24"), [{ t: "cheer practice", late: false }]);
 });
 
-/* ---------- sunday reset ---------- */
+test("openTodos does not project a repeat before the day it was created", () => {
+  const state = { repeats: [{ id: "r1", t: "cheer practice", dows: [1], from: "2026-09-01" }] };
+  assert.deepEqual(openTodos(state, "2026-08-24"), []);
+});
+
+test("openTodos respects a repeat already ticked for that date", () => {
+  const state = {
+    repeats: [{ id: "r1", t: "cheer practice", dows: [1], from: "2026-08-01" }],
+    repeatDone: { "2026-08-24": { r1: true } }
+  };
+  assert.deepEqual(openTodos(state, "2026-08-24"), []);
+});
+
+test("openTodos tolerates a malformed repeat", () => {
+  const state = { repeats: [{ id: "bad", t: "no days" }, null] };
+  assert.deepEqual(openTodos(state, "2026-08-24"), []);
+});
+
+/* ---------- the reset checklist ---------- */
 
 test("resetIncomplete treats a stale week as untouched", () => {
-  const state = { reset: { week: "2026-08-16", done: [true, true, true] } };
-  assert.equal(resetIncomplete(state, "2026-08-23"), true);
+  assert.equal(resetIncomplete({ reset: { week: "2026-08-16", done: [true, true, true] } }, "2026-08-23"), true);
+  assert.equal(resetIncomplete({ reset: { week: "2026-08-23", done: [] } }, "2026-08-23"), true);
+  assert.equal(resetIncomplete({}, "2026-08-23"), true);
 });
 
 test("resetIncomplete is false only when this week is fully ticked", () => {
   assert.equal(resetIncomplete({ reset: { week: "2026-08-23", done: [true, true, true] } }, "2026-08-23"), false);
-  assert.equal(resetIncomplete({ reset: { week: "2026-08-23", done: [true, false, true] } }, "2026-08-23"), true);
-  assert.equal(resetIncomplete({ reset: { week: "2026-08-23", done: [] } }, "2026-08-23"), true);
-  assert.equal(resetIncomplete({}, "2026-08-23"), true);
+  assert.equal(resetIncomplete({ reset: { week: "2026-08-23", done: [true, true, false] } }, "2026-08-23"), true);
 });
 
 /* ---------- the evening nag ---------- */
 
 const eveningSat = { ymd: "2026-08-22", hour: 20, dow: 6 };
+const oneOpen = { todos: { "2026-08-22": [item("poster board")] } };
 
 test("nag stays silent before 8pm", () => {
-  const state = { habits: { meditation: daily({}) } };
-  assert.deepEqual(decideNotifications(state, { ...eveningSat, hour: 19 }, {}), []);
+  assert.deepEqual(decideNotifications(oneOpen, { ...eveningSat, hour: 19 }, {}), []);
 });
 
-test("nag fires at 8pm when a habit is unlogged", () => {
-  const state = { habits: { meditation: daily({}) } };
-  const out = decideNotifications(state, eveningSat, {});
+test("nag names the single open item", () => {
+  const out = decideNotifications(oneOpen, eveningSat, {});
   assert.equal(out.length, 1);
   assert.equal(out[0].key, "nag");
-  assert.equal(out[0].body, "Still time to log today's habits.");
+  assert.equal(out[0].body, "One thing left: poster board");
 });
 
-test("nag stays silent when everything is logged", () => {
-  const state = { habits: { meditation: daily(logged("2026-08-22")) } };
+test("nag counts when several are open", () => {
+  const state = { todos: { "2026-08-22": [item("a"), item("b"), item("c")] } };
+  assert.equal(decideNotifications(state, eveningSat, {})[0].body, "3 things still on today's list.");
+});
+
+test("nag names a rolled-over item ahead of the count", () => {
+  const state = { todos: { "2026-08-19": [item("library")], "2026-08-22": [item("a"), item("b")] } };
+  assert.equal(decideNotifications(state, eveningSat, {})[0].body,
+    '"library" has been waiting since before today.');
+});
+
+test("nag stays silent when the list is clear", () => {
+  const state = { todos: { "2026-08-22": [item("done one", true)] } };
   assert.deepEqual(decideNotifications(state, eveningSat, {}), []);
 });
 
-test("nag sharpens the message when a 5+ day streak is at risk", () => {
-  const state = {
-    habits: {
-      meditation: daily(logged(
-        "2026-08-16", "2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21"
-      ))
-    }
-  };
-  const out = decideNotifications(state, eveningSat, {});
-  assert.equal(out[0].body, "6-day Meditation streak breaks at midnight.");
-});
-
-test("nag reports the longest streak among several unlogged habits", () => {
-  const state = {
-    habits: {
-      short: { name: "Learning", scheduled: null, dates: logged("2026-08-21") },
-      long: {
-        name: "Meditation", scheduled: null,
-        dates: logged("2026-08-17", "2026-08-18", "2026-08-19", "2026-08-20", "2026-08-21")
-      }
-    }
-  };
-  assert.equal(decideNotifications(state, eveningSat, {})[0].body,
-    "5-day Meditation streak breaks at midnight.");
+test("nag fires for a repeat that is due and unticked", () => {
+  const state = { repeats: [{ id: "r1", t: "laundry", dows: [6], from: "2026-08-01" }] };
+  assert.equal(decideNotifications(state, eveningSat, {})[0].body, "One thing left: laundry");
 });
 
 test("nag does not repeat once it has fired today", () => {
-  const state = { habits: { meditation: daily({}) } };
-  assert.deepEqual(decideNotifications(state, eveningSat, { nag: "2026-08-22" }), []);
+  assert.deepEqual(decideNotifications(oneOpen, eveningSat, { nag: "2026-08-22" }), []);
 });
 
 test("nag fires again the next day", () => {
-  const state = { habits: { meditation: daily({}) } };
+  const state = { todos: { "2026-08-22": [item("poster board")] } };
   const out = decideNotifications(state, { ymd: "2026-08-23", hour: 20, dow: 0 }, { nag: "2026-08-22" });
   assert.ok(out.some(n => n.key === "nag"));
-});
-
-/* ---------- cheer ---------- */
-
-test("cheer fires the day before the event", () => {
-  const state = { cheer: { nextName: "Regionals", nextDate: "2026-08-23", dates: {} } };
-  const out = decideNotifications(state, { ymd: "2026-08-22", hour: 9, dow: 6 }, {});
-  assert.equal(out.length, 1);
-  assert.equal(out[0].key, "cheer");
-  assert.equal(out[0].body, "Regionals is tomorrow.");
-});
-
-test("cheer falls back to a generic message when unnamed", () => {
-  const state = { cheer: { nextName: "  ", nextDate: "2026-08-23", dates: {} } };
-  assert.equal(decideNotifications(state, { ymd: "2026-08-22", hour: 9, dow: 6 }, {})[0].body,
-    "Cheer event tomorrow.");
-});
-
-test("cheer stays silent on the day itself and two days out", () => {
-  const state = { cheer: { nextName: "Regionals", nextDate: "2026-08-23", dates: {} } };
-  assert.deepEqual(decideNotifications(state, { ymd: "2026-08-23", hour: 9, dow: 0 }, { reset: "2026-08-23" }), []);
-  assert.deepEqual(decideNotifications(state, { ymd: "2026-08-21", hour: 9, dow: 5 }, {}), []);
-});
-
-test("cheer stays silent with no date set", () => {
-  const state = { cheer: { nextName: "", nextDate: "", dates: {} } };
-  assert.deepEqual(decideNotifications(state, { ymd: "2026-08-22", hour: 9, dow: 6 }, {}), []);
-});
-
-test("cheer does not repeat once it has fired today", () => {
-  const state = { cheer: { nextName: "Regionals", nextDate: "2026-08-23", dates: {} } };
-  assert.deepEqual(decideNotifications(state, { ymd: "2026-08-22", hour: 9, dow: 6 }, { cheer: "2026-08-22" }), []);
 });
 
 /* ---------- sunday reset ---------- */
@@ -263,7 +191,7 @@ test("reset nudge stays silent when finished, before 10am, and off-Sunday", () =
 
 test("a Sunday evening can carry both the reset nudge and the nag", () => {
   const state = {
-    habits: { meditation: daily({}) },
+    todos: { "2026-08-23": [item("poster board")] },
     reset: { week: "2026-08-23", done: [false, false, false] }
   };
   const keys = decideNotifications(state, { ymd: "2026-08-23", hour: 20, dow: 0 }, {}).map(n => n.key);
@@ -272,7 +200,7 @@ test("a Sunday evening can carry both the reset nudge and the nag", () => {
 
 test("each trigger dedupes independently", () => {
   const state = {
-    habits: { meditation: daily({}) },
+    todos: { "2026-08-23": [item("poster board")] },
     reset: { week: "2026-08-23", done: [false, false, false] }
   };
   const out = decideNotifications(state, { ymd: "2026-08-23", hour: 20, dow: 0 }, { reset: "2026-08-23" });
@@ -280,8 +208,7 @@ test("each trigger dedupes independently", () => {
 });
 
 test("every notification carries the ymd used for dedup", () => {
-  const state = { habits: { meditation: daily({}) } };
-  assert.equal(decideNotifications(state, eveningSat, {})[0].ymd, "2026-08-22");
+  assert.equal(decideNotifications(oneOpen, eveningSat, {})[0].ymd, "2026-08-22");
 });
 
 test("null or empty state produces nothing", () => {

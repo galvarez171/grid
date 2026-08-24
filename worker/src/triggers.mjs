@@ -41,33 +41,25 @@ export function localParts(now, timeZone) {
   return { ymd, hour: Number(p.hour) % 24, dow: dayOfWeek(ymd) };
 }
 
-/* ---------- habit helpers (mirror the app's own logic exactly) ---------- */
+/* ---------- to-do helpers (mirror the app's own logic exactly) ---------- */
 
-// A habit with scheduled:[] is scheduled for no day at all — note `!h.scheduled`
-// is false for an empty array, so it correctly falls through to includes().
-export function isScheduled(h, dow) {
-  return !h.scheduled || h.scheduled.includes(dow);
-}
-
-// Mirrors currentStreak() in index.html, including the grace rule (an unlogged
-// today doesn't break the streak) and the guard against a habit that is
-// scheduled for no day, which would otherwise loop forever.
-export function currentStreak(h, todayYmd) {
-  let cur = todayYmd;
-  if (isScheduled(h, dayOfWeek(cur)) && !h.dates?.[cur]) cur = addDaysYmd(cur, -1);
-  let n = 0, guard = 0;
-  while (guard++ < 3660) {
-    if (!isScheduled(h, dayOfWeek(cur))) { cur = addDaysYmd(cur, -1); continue; }
-    if (h.dates?.[cur]) { n++; cur = addDaysYmd(cur, -1); }
-    else break;
+/* An unfinished item rolls forward until it is done, so "open today" means
+ * everything undone on or before today — not just what was filed under today.
+ * A repeat is a pattern projected onto the days it matches, with completion
+ * recorded per date, so it is never a row that can be left behind. */
+export function openTodos(state, todayYmd) {
+  const out = [];
+  const todos = state?.todos || {};
+  for (const k of Object.keys(todos).sort()) {
+    if (k > todayYmd) continue;
+    for (const x of todos[k] || []) if (x && !x.done) out.push({ t: x.t, late: k < todayYmd });
   }
-  return n;
-}
-
-export function habitsUndone(state, todayYmd) {
   const dow = dayOfWeek(todayYmd);
-  return Object.values(state?.habits || {})
-    .filter(h => h && isScheduled(h, dow) && !h.dates?.[todayYmd]);
+  for (const r of state?.repeats || []) {
+    if (!Array.isArray(r?.dows) || !r.dows.includes(dow) || todayYmd < r.from) continue;
+    if (!state?.repeatDone?.[todayYmd]?.[r.id]) out.push({ t: r.t, late: false });
+  }
+  return out;
 }
 
 // The app rewrites reset.week to the current Sunday on render. A stale week
@@ -91,39 +83,24 @@ export function decideNotifications(state, parts, sent = {}) {
   if (!state) return out;
   const { ymd: todayYmd, hour, dow } = parts;
 
-  // Triggers 1+2: evening habit nag, sharpened when a long streak is at risk.
-  // PLAN_V2 §3 lists streak-at-risk as "the same trigger as #1" — so it's one
-  // notification with a sharper message, not a second buzz.
+  // Evening nag: what's still open on the to-do list. An item carried over
+  // from an earlier day is named directly — that's the one most likely to keep
+  // being ignored, and a count alone never says which.
   if (hour >= 20 && sent.nag !== todayYmd) {
-    const undone = habitsUndone(state, todayYmd);
-    if (undone.length) {
-      let top = null;
-      for (const h of undone) {
-        const s = currentStreak(h, todayYmd);
-        if (!top || s > top.s) top = { h, s };
-      }
-      const body = top && top.s >= 5
-        ? `${top.s}-day ${top.h.name} streak breaks at midnight.`
-        : "Still time to log today's habits.";
+    const open = openTodos(state, todayYmd);
+    if (open.length) {
+      const late = open.find(x => x.late);
+      const body = late
+        ? `"${late.t}" has been waiting since before today.`
+        : open.length === 1
+          ? `One thing left: ${open[0].t}`
+          : `${open.length} things still on today's list.`;
       out.push({ key: "nag", ymd: todayYmd, title: "Grid", body });
     }
   }
 
-  // Trigger 3: cheer event tomorrow. Fires the morning before, so a day-
-  // granular event still gets roughly a day's warning.
-  if (hour >= 9 && sent.cheer !== todayYmd) {
-    const nextDate = state.cheer?.nextDate;
-    if (nextDate && nextDate === addDaysYmd(todayYmd, 1)) {
-      const name = (state.cheer?.nextName || "").trim();
-      out.push({
-        key: "cheer", ymd: todayYmd, title: "Grid",
-        body: name ? `${name} is tomorrow.` : "Cheer event tomorrow."
-      });
-    }
-  }
-
-  // Trigger 4: Sunday Reset nudge. Separate from the existing Personal-calendar
-  // alert — this one points at opening Grid to run the checklist.
+  // Sunday Reset nudge. Separate from the existing Personal-calendar alert —
+  // this one points at opening Grid to run the checklist.
   if (dow === 0 && hour >= 10 && sent.reset !== todayYmd && resetIncomplete(state, todayYmd)) {
     out.push({
       key: "reset", ymd: todayYmd, title: "Grid",
