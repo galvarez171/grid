@@ -433,6 +433,19 @@ body::before{animation:drift 7s linear infinite}
         <button class="btn" id="syncSave" style="--c:var(--work)">Save</button>
         <button class="btn" id="syncCancel">Cancel</button>
       </div>
+      <!-- The token has to be typed into the Grid Todo shortcut and the
+           Scriptable widget as well, and there is nowhere else on the phone to
+           read it back from. It already lives in this device's storage, so
+           showing it on demand exposes nothing new. -->
+      <div id="syncReveal" hidden style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+        <span class="lbl">Saved token</span>
+        <div id="syncToken" style="font:400 15px/1.4 ui-monospace,Menlo,monospace;
+             color:var(--dimmer);margin-top:7px;word-break:break-all;-webkit-user-select:text;user-select:text"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn" id="syncShow">Show</button>
+          <button class="btn" id="syncCopy">Copy</button>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -510,7 +523,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v17";
+const APP_VERSION = "v18";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -1268,12 +1281,38 @@ $("#btnSync").onclick = ()=>{
   p.hidden = !p.hidden;
   if(!p.hidden){
     $("#syncInput").value = "";
-    syncHint();
+    tokenShown = false;
+    syncHint(); drawToken();
     p.scrollIntoView({block:"center"});
     $("#syncInput").focus();
   }
 };
 $("#syncCancel").onclick = ()=>{ $("#syncPanel").hidden = true; };
+
+// Masked until asked for, so the panel can be opened in front of someone.
+let tokenShown = false;
+function drawToken(){
+  const t = syncToken();
+  $("#syncReveal").hidden = !t;
+  if(!t) return;
+  $("#syncToken").textContent = tokenShown ? t : t.replace(/./g, "•");
+  $("#syncToken").style.color = tokenShown ? "var(--txt)" : "var(--dimmer)";
+  $("#syncShow").textContent = tokenShown ? "Hide" : "Show";
+}
+$("#syncShow").onclick = ()=>{ tokenShown = !tokenShown; drawToken(); };
+$("#syncCopy").onclick = async ()=>{
+  const t = syncToken();
+  if(!t) return;
+  try{
+    await navigator.clipboard.writeText(t);
+    toast("Token copied");
+  }catch(e){
+    // Clipboard access can be refused outright; revealing it at least leaves
+    // something to select by hand rather than a dead button.
+    tokenShown = true; drawToken();
+    toast("Couldn't copy — select it by hand");
+  }
+};
 $("#syncSave").onclick = async ()=>{
   const entered = $("#syncInput").value;
   // The token is base64url, so anything outside that alphabet arrived with the
@@ -1309,7 +1348,7 @@ async function verifySync(token){
       headers:{ "content-type":"application/json", authorization:"Bearer "+token },
       body: JSON.stringify(S)
     });
-    if(put.ok){ toast("Sync on"); $("#syncPanel").hidden = true; }
+    if(put.ok){ toast("Sync on"); drawToken(); $("#syncPanel").hidden = true; }
     else toast("Sync: worker "+put.status);
   }catch(e){
     const err = (e && (e.message || e.name)) || "unreachable";
