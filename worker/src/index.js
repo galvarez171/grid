@@ -20,6 +20,11 @@ const SENT_KEY = "sent";
 // and the app drains this queue into localStorage, which stays the truth.
 const INBOX_KEY = "inbox";
 const MAX_INBOX = 200;
+// The PWA gets no calendar access from iOS, so the phone's Scriptable widget
+// (which is native and does) pushes a flattened mirror of the next few weeks
+// here on every refresh. Read-only as far as Apple Calendar is concerned.
+const EVENTS_KEY = "events";
+const MAX_EVENTS = 1000;
 const MAX_BODY = 200 * 1024; // KV allows 25MB; Grid's blob is a few KB. Anything
                              // bigger than this is a bug, not a real state.
 
@@ -95,6 +100,83 @@ export default {
       // better than a rejected one the user just spoke.
       await env.GRID_KV.put(INBOX_KEY, JSON.stringify(items.slice(-MAX_INBOX)));
       return json({ ok: true, item: entry }, 200, origin);
+    }
+
+    /* ---------- calendar mirror ---------- */
+
+    if (url.pathname === "/events" && req.method === "PUT") {
+      const body = await req.text();
+      if (body.length > MAX_BODY) return json({ error: "payload too large" }, 413, origin);
+      let payload;
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        return json({ error: "invalid json" }, 400, origin);
+      }
+      if (!Array.isArray(payload?.events)) return json({ error: "events must be an array" }, 400, origin);
+      // Times arrive already resolved to the phone's wall clock — minutes from
+      // midnight on a named day — so neither this Worker nor the app has to do
+      // timezone math on someone else's calendar.
+      const events = payload.events
+        .filter(e => e && typeof e.t === "string" && /^\d{4}-\d{2}-\d{2}$/.test(e.d || ""))
+        .slice(0, MAX_EVENTS)
+        .map(e => ({
+          id: String(e.id || "").slice(0, 128),
+          t: String(e.t).slice(0, 120),
+          d: e.d,
+          s: e.allDay ? null : clampMin(e.s),
+          e: e.allDay ? null : clampMin(e.e),
+          allDay: !!e.allDay,
+          cal: String(e.cal || "").slice(0, 60)
+        }))
+        // A timed event whose minutes didn't survive validation has nowhere to
+        // sit in the hour grid. Dropping it beats letting it masquerade as an
+        // all-day event, which is what a null start would look like downstream.
+        .filter(e => e.allDay || (e.s !== null && e.e !== null && e.e > e.s));
+      const syncedAt = new Date().toISOString();
+      await env.GRID_KV.put(EVENTS_KEY, JSON.stringify({ v: 1, syncedAt, events }));
+      return json({ ok: true, syncedAt, count: events.length }, 200, origin);
+    }
+
+    if (url.pathname === "/events" && req.method === "GET") {
+      const raw = await env.GRID_KV.get(EVENTS_KEY);
+      if (!raw) return json({ v: 1, syncedAt: null, events: [] }, 200, origin);
+      return new Response(raw, { status: 200, headers: { ...cors(origin), "content-type": "application/json" } });
+    }
+
+    /* ---------- widget toggle ---------- */
+
+    // The widget can't reach localStorage, so it flips the item on the mirrored
+    // state (which is what the widget itself reads back) and queues the same
+    // flip for the app. Both sides converge on the app's next drain.
+    if (url.pathname === "/todo/toggle" && req.method === "POST") {
+      let ask;
+      try {
+        ask = JSON.parse(await req.text());
+      } catch {
+        return json({ error: "invalid json" }, 400, origin);
+      }
+      const id = String(ask?.id || "");
+      if (!id) return json({ error: "id required" }, 400, origin);
+      const day = /^\d{4}-\d{2}-\d{2}$/.test(ask?.ymd || "") ? ask.ymd : null;
+
+      const raw = await env.GRID_KV.get(KV_KEY);
+      let done = null;
+      if (raw) {
+        const wrapper = JSON.parse(raw);
+        const state = wrapper.state || {};
+        done = applyToggle(state, id, day);
+        if (done !== null) {
+          await env.GRID_KV.put(KV_KEY, JSON.stringify({ ...wrapper, state }));
+        }
+      }
+      if (done === null) return json({ error: "not found" }, 404, origin);
+
+      const inboxRaw = await env.GRID_KV.get(INBOX_KEY);
+      const items = inboxRaw ? JSON.parse(inboxRaw) : [];
+      items.push({ id: crypto.randomUUID(), op: "toggle", ref: id, ymd: day, done, at: new Date().toISOString() });
+      await env.GRID_KV.put(INBOX_KEY, JSON.stringify(items.slice(-MAX_INBOX)));
+      return json({ ok: true, done }, 200, origin);
     }
 
     if (url.pathname === "/inbox" && req.method === "GET") {
@@ -224,6 +306,34 @@ async function sendPush(env, { title, body }, subscription) {
   if (res.status === 404 || res.status === 410) await env.GRID_KV.delete(SUB_KEY);
 
   return { ok: res.ok, status: res.status };
+}
+
+/* ---------- helpers ---------- */
+
+// Minutes from local midnight. Anything outside a day is a bug in the pusher,
+// not a real event, so it's dropped rather than clamped into a wrong hour.
+function clampMin(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 && n <= 1440 ? n : null;
+}
+
+// Returns the new done value, or null if the id matched nothing — which is how
+// the caller tells a stale widget tap from a real one.
+function applyToggle(state, id, day) {
+  if (day && Array.isArray(state.repeats) && state.repeats.some(r => r.id === id)) {
+    state.repeatDone = state.repeatDone || {};
+    const bucket = state.repeatDone[day] = state.repeatDone[day] || {};
+    const next = !bucket[id];
+    if (next) bucket[id] = true; else delete bucket[id];
+    if (!Object.keys(bucket).length) delete state.repeatDone[day];
+    return next;
+  }
+  const todos = state.todos || {};
+  for (const k of Object.keys(todos)) {
+    const item = (todos[k] || []).find(x => x.id === id);
+    if (item) { item.done = !item.done; return item.done; }
+  }
+  return null;
 }
 
 /* ---------- auth ---------- */

@@ -1,23 +1,32 @@
-// Grid — Scriptable home-screen widget (PLAN_V2 step 5).
+// Grid — Scriptable home-screen widget.
 //
-// Shows what's next on the Apple Calendar, in Grid's colors.
+// Shows TODAY, and only today: the day's calendar events, then the day's open
+// to-dos with a box you can tap to tick off.
 //
 // Note on the architecture: the PWA can't read Apple Calendar — iOS gives web
 // apps no calendar access, which is why Grid only ever writes to it via the
-// Shortcuts. Scriptable is a native app, so EventKit is available here. That
-// makes this widget entirely local: no token, no network, no dependency on the
-// sync Worker (which still exists for push notifications, and is unaffected).
+// Shortcuts. Scriptable is native, so EventKit is available here. That makes
+// this script the only thing on the phone that can see both halves, so it also
+// pushes a flattened mirror of the next few weeks to the sync Worker, which is
+// what fills the app's hour-by-hour day view.
+//
+// It is read-only as far as Apple Calendar is concerned: it never creates,
+// edits, or deletes an event.
+//
+// Unlike the earlier version, this one needs the sync token and a network —
+// to-dos live in Grid, not on the calendar. Events still draw without either.
 //
 // This is the canonical copy; the running one lives in the Scriptable app.
-// Read-only — it never creates, edits, or deletes an event.
 
-const LOOKAHEAD_DAYS = 14;   // how far out to look for "next"
-const MAX_ROWS = 3;          // extra events listed under the headline (small)
+const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
+const APP_URL = "https://galvarez171.github.io/grid/";
+const KEYCHAIN_KEY = "grid-sync-token";
+const MIRROR_DAYS = 21;      // how far ahead to mirror into the app's day view
+const MAX_EVENT_ROWS = { medium: 3, large: 7 };
+const MAX_TODO_ROWS = { medium: 3, large: 6 };
 
 // Grid's circuit colors, matched against the calendar's name so the widget
-// reads as the same product as the app. Habits are deliberately absent —
-// they live in Grid's own storage, not on a calendar, so nothing here can
-// ever match them.
+// reads as the same product as the app.
 const CIRCUITS = [
   [/work|shift|job/i, "#00B4FF"],
   [/cheer/i, "#FF2D95"],
@@ -25,75 +34,147 @@ const CIRCUITS = [
   [/personal|life|home/i, "#22E39A"]
 ];
 const BG = "#05070A";
+const TXT = "#C9D6E2";
 const DIM = "#5A6B7A";
+const DIMMER = "#38454F";
+const ACCENT = "#FF8A1E";     // to-dos, matching the app's To-Do panel
 const FALLBACK = "#22E39A";
+
+/* ---------- token ---------- */
+
+// Kept in the Keychain rather than in this file: the file syncs through iCloud
+// Drive and has a copy in the repo, and neither is a place for a bearer token.
+function getToken() {
+  return Keychain.contains(KEYCHAIN_KEY) ? Keychain.get(KEYCHAIN_KEY) : null;
+}
+
+async function promptForToken() {
+  const a = new Alert();
+  a.title = "Grid sync token";
+  a.message = "Paste the same token you saved in the Grid app.";
+  a.addSecureTextField("token", "");
+  a.addAction("Save");
+  a.addCancelAction("Cancel");
+  if ((await a.presentAlert()) < 0) return null;
+  const v = (a.textFieldValue(0) || "").trim();
+  if (!v) return null;
+  Keychain.set(KEYCHAIN_KEY, v);
+  return v;
+}
+
+function api(path, token, options) {
+  const r = new Request(SYNC_URL + path);
+  r.headers = Object.assign({ authorization: "Bearer " + token }, (options || {}).headers || {});
+  if (options && options.method) r.method = options.method;
+  if (options && options.body) {
+    r.body = options.body;
+    r.headers["content-type"] = "application/json";
+  }
+  return r;
+}
 
 /* ---------- calendar ---------- */
 
-// Colors an event by its calendar's name, falling back to the color the
-// calendar itself is assigned in iOS so an unrecognised one still looks right.
+const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const pad = n => String(n).padStart(2, "0");
+const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+const minutes = d => d.getHours() * 60 + d.getMinutes();
+
 function eventColor(ev) {
-  const name = ev.calendar?.title || "";
+  const name = (ev.calendar && ev.calendar.title) || "";
   for (const [re, hex] of CIRCUITS) if (re.test(name)) return hex;
-  const c = ev.calendar?.color;
+  const c = ev.calendar && ev.calendar.color;
   return c ? "#" + c.hex.replace(/^#/, "") : FALLBACK;
 }
 
-async function loadEvents() {
+async function loadRange(from, to) {
   const cals = await Calendar.forEvents();
-  const now = new Date();
-  const end = new Date(now.getTime() + LOOKAHEAD_DAYS * 86400000);
-  const events = await CalendarEvent.between(now, end, cals);
-  return events
-    // between() includes events already in progress; keep those (they're still
-    // "what's happening"), but drop anything that has fully ended.
-    .filter(e => (e.isAllDay ? endOfDay(e.startDate) : e.endDate) >= now)
-    .sort((a, b) => a.startDate - b.startDate);
+  return (await CalendarEvent.between(from, to, cals)).sort((a, b) => a.startDate - b.startDate);
 }
 
-function endOfDay(d) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+// One entry per day an event covers, with times already resolved to this
+// phone's wall clock — the Worker and the app then need no timezone math at
+// all, which is the whole point of flattening here rather than there.
+function flatten(events) {
+  const out = [];
+  for (const ev of events) {
+    const first = startOfDay(ev.startDate);
+    // An all-day event's endDate is midnight on the following day; a timed one
+    // ending exactly at midnight belongs to the day it started, not the next.
+    const lastRaw = new Date(ev.endDate.getTime() - 1);
+    const last = startOfDay(lastRaw < first ? ev.startDate : lastRaw);
+    for (let d = first; d <= last; d = addDays(d, 1)) {
+      const sameStart = ymd(d) === ymd(ev.startDate);
+      const sameEnd = ymd(d) === ymd(lastRaw);
+      out.push({
+        id: ev.identifier + "@" + ymd(d),
+        t: ev.title || "(untitled)",
+        d: ymd(d),
+        s: ev.isAllDay ? null : (sameStart ? minutes(ev.startDate) : 0),
+        // Measured from this day's midnight rather than read off the clock, so
+        // an event ending at exactly 00:00 lands on 1440 and not on 0 — which
+        // would make it end before it started and vanish from the day view.
+        e: ev.isAllDay ? null
+          : (sameEnd ? Math.min(1440, Math.round((ev.endDate - d) / 60000)) : 1440),
+        allDay: !!ev.isAllDay,
+        cal: (ev.calendar && ev.calendar.title) || ""
+      });
+      if (out.length >= 1000) return out;
+    }
+  }
+  return out;
 }
 
-/* ---------- date formatting ---------- */
-
-const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-function daysFromToday(d) {
-  return Math.round((startOfDay(d) - startOfDay(new Date())) / 86400000);
+async function pushMirror(token) {
+  const from = startOfDay(new Date());
+  const events = flatten(await loadRange(from, addDays(from, MIRROR_DAYS)));
+  const req = api("/events", token, { method: "PUT", body: JSON.stringify({ events }) });
+  await req.loadJSON();
 }
 
-function fmtTime(d) {
-  const f = new DateFormatter();
-  f.dateFormat = "h:mm a";
-  return f.string(d);
-}
-function fmtWeekday(d) {
-  const f = new DateFormatter();
-  f.dateFormat = "EEE";
-  return f.string(d).toUpperCase();
-}
-function fmtDate(d) {
-  const f = new DateFormatter();
-  f.dateFormat = "MMM d";
-  return f.string(d).toUpperCase();
+/* ---------- to-dos ---------- */
+
+// Mirrors the app's own rules: an unfinished item rolls forward until it's
+// done, and a repeat is a pattern projected onto the days it matches rather
+// than a row stored per week.
+function openTodosFor(state, key) {
+  const out = [];
+  const todos = (state && state.todos) || {};
+  for (const k of Object.keys(todos).sort()) {
+    if (k > key) continue;
+    for (const x of todos[k] || []) {
+      if (!x.done) out.push({ id: x.id, t: x.t, late: k < key, ymd: null });
+    }
+  }
+  const dow = new Date(key.slice(0, 4), +key.slice(5, 7) - 1, +key.slice(8, 10)).getDay();
+  for (const r of (state && state.repeats) || []) {
+    if (!r.dows.includes(dow) || key < r.from) continue;
+    const done = state.repeatDone && state.repeatDone[key] && state.repeatDone[key][r.id];
+    if (!done) out.push({ id: r.id, t: r.t, late: false, ymd: key });
+  }
+  return out;
 }
 
-// "TODAY 4:00 PM" / "TOMORROW · ALL DAY" / "MON 9:00 AM" / "SEP 3 9:00 AM"
-function whenLabel(ev) {
-  const n = daysFromToday(ev.startDate);
-  const day = n === 0 ? "TODAY" : n === 1 ? "TOMORROW" : n < 7 ? fmtWeekday(ev.startDate) : fmtDate(ev.startDate);
-  return ev.isAllDay ? day + " · ALL DAY" : day + " " + fmtTime(ev.startDate);
+async function loadTodos(token, key) {
+  const res = await api("/state", token).loadJSON();
+  return openTodosFor(res && res.state, key);
 }
 
-// A short "in 25m" / "in 3h" hint, only while it's near enough to matter.
-function soonLabel(ev) {
-  if (ev.isAllDay) return "";
-  const ms = ev.startDate - new Date();
-  if (ms < 0) return "NOW";
-  if (ms > 12 * 3600000) return "";
-  const mins = Math.round(ms / 60000);
-  if (mins < 60) return "IN " + mins + "M";
-  return "IN " + Math.round(mins / 60) + "H";
+/* ---------- the tap ---------- */
+
+// A home-screen widget runs no code when tapped — it can only open a URL. So a
+// checkbox opens this same script with a toggle parameter, which flips the item
+// on the Worker and returns. Scriptable visibly launches for a moment; that is
+// the cost of a tickable box on the home screen.
+function toggleURL(item) {
+  const q = "toggle=" + encodeURIComponent(item.id) + (item.ymd ? "&ymd=" + item.ymd : "");
+  return "scriptable:///run/" + encodeURIComponent(Script.name()) + "?" + q;
+}
+
+async function runToggle(token, id, key) {
+  const body = JSON.stringify(key ? { id, ymd: key } : { id });
+  await api("/todo/toggle", token, { method: "POST", body }).loadJSON();
 }
 
 /* ---------- drawing ---------- */
@@ -106,81 +187,150 @@ function addLine(stack, text, hex, size, bold) {
   return t;
 }
 
-function build(events, error) {
-  const family = config.widgetFamily || "small";
-  const wide = family === "medium" || family === "large";
+function fmtTime(d) {
+  const f = new DateFormatter();
+  f.dateFormat = "h:mm a";
+  return f.string(d);
+}
+function fmtToday(d) {
+  const f = new DateFormatter();
+  f.dateFormat = "EEE MMM d";
+  return f.string(d).toUpperCase();
+}
+
+function eventRow(w, ev, now) {
+  const row = w.addStack();
+  row.centerAlignContent();
+  const past = !ev.isAllDay && ev.endDate < now;
+  const hex = past ? DIMMER : eventColor(ev);
+  addLine(row, "▪ ", hex, 9, true);
+  addLine(row, ev.title || "(untitled)", past ? DIMMER : TXT, 10, false);
+  row.addSpacer();
+  addLine(row, ev.isAllDay ? "ALL DAY" : fmtTime(ev.startDate), past ? DIMMER : DIM, 9, false);
+  w.addSpacer(3);
+}
+
+function todoRow(w, item) {
+  const row = w.addStack();
+  row.centerAlignContent();
+  row.url = toggleURL(item);          // the tap target is the whole row
+  const box = addLine(row, "☐ ", item.late ? "#FF2D95" : ACCENT, 11, false);
+  box.lineLimit = 1;
+  addLine(row, item.t, TXT, 10, false);
+  row.addSpacer();
+  if (item.late) addLine(row, "LATE", "#FF2D95", 8, true);
+  else if (item.ymd) addLine(row, "WKLY", DIMMER, 8, false);
+  w.addSpacer(3);
+}
+
+function section(w, label) {
+  w.addSpacer(6);
+  addLine(w, label, DIMMER, 8, true);
+  w.addSpacer(3);
+}
+
+function build(events, todos, note) {
+  const family = config.widgetFamily || "medium";
   const w = new ListWidget();
   w.backgroundColor = new Color(BG);
   w.setPadding(12, 12, 12, 12);
+  w.url = APP_URL;                    // tapping anywhere else opens Grid
 
+  const now = new Date();
   const header = w.addStack();
   header.centerAlignContent();
   addLine(header, "GRID", FALLBACK, 10, true);
   header.addSpacer();
-  addLine(header, "NEXT", DIM, 9, false);
-  w.addSpacer(6);
+  addLine(header, fmtToday(now), DIM, 9, false);
 
-  if (error) {
-    const denied = /denied|permission|access/i.test(error.message || "");
-    addLine(w, denied ? "NO ACCESS" : "ERROR", DIM, 11, true);
-    w.addSpacer(2);
-    addLine(w, denied ? "open script in app" : String(error.message).slice(0, 22), DIM, 9, false);
+  // A small widget has exactly one tap target for the whole thing, so per-row
+  // checkboxes are impossible there — show the shape of the day instead.
+  if (family === "small") {
+    w.addSpacer(6);
+    const next = events.find(e => e.isAllDay || e.endDate >= now);
+    if (next) {
+      addLine(w, next.title || "(untitled)", eventColor(next), 13, true).lineLimit = 2;
+      addLine(w, next.isAllDay ? "ALL DAY" : fmtTime(next.startDate), DIM, 9, false);
+    } else {
+      addLine(w, "NOTHING LEFT", DIM, 12, true);
+    }
+    w.addSpacer(6);
+    addLine(w, todos.length ? todos.length + (todos.length === 1 ? " TO-DO" : " TO-DOS") : "LIST CLEAR",
+            todos.length ? ACCENT : DIM, 10, true);
     w.refreshAfterDate = new Date(Date.now() + 15 * 60000);
     return w;
   }
 
-  if (!events.length) {
-    addLine(w, "NOTHING", DIM, 13, true);
-    addLine(w, "SCHEDULED", DIM, 13, true);
-    w.addSpacer(3);
-    addLine(w, "next " + LOOKAHEAD_DAYS + " days", DIM, 9, false);
-    w.refreshAfterDate = new Date(Date.now() + 30 * 60000);
-    return w;
-  }
+  const evCap = MAX_EVENT_ROWS[family] || 3;
+  const tdCap = MAX_TODO_ROWS[family] || 3;
 
-  // Headline: the next thing coming up.
-  const next = events[0];
-  const hex = eventColor(next);
-  addLine(w, next.title || "(untitled)", hex, wide ? 15 : 13, true).lineLimit = wide ? 1 : 2;
-  w.addSpacer(2);
-  const meta = w.addStack();
-  meta.centerAlignContent();
-  addLine(meta, whenLabel(next), hex, 10, false);
-  const soon = soonLabel(next);
-  if (soon) { meta.addSpacer(6); addLine(meta, soon, DIM, 9, true); }
+  section(w, "SCHEDULE");
+  if (!events.length) addLine(w, "nothing on the calendar", DIMMER, 9, false);
+  for (const ev of events.slice(0, evCap)) eventRow(w, ev, now);
+  if (events.length > evCap) addLine(w, "+" + (events.length - evCap) + " more", DIMMER, 8, false);
 
-  // Then the ones after it.
-  const rest = events.slice(1, 1 + (wide ? MAX_ROWS + 2 : MAX_ROWS));
-  if (rest.length) {
-    w.addSpacer(8);
-    for (const ev of rest) {
-      const row = w.addStack();
-      row.centerAlignContent();
-      addLine(row, "▪ ", eventColor(ev), 9, true);
-      addLine(row, ev.title || "(untitled)", DIM, 9, false).lineLimit = 1;
-      row.addSpacer();
-      addLine(row, whenLabel(ev), DIM, 9, false);
-      w.addSpacer(2);
-    }
-  }
+  section(w, note ? "TO-DO · " + note : "TO-DO");
+  if (!todos.length && !note) addLine(w, "nothing left today", DIMMER, 9, false);
+  for (const item of todos.slice(0, tdCap)) todoRow(w, item);
+  if (todos.length > tdCap) addLine(w, "+" + (todos.length - tdCap) + " more", DIMMER, 8, false);
 
-  // Roll the widget forward just after the current headline starts, so "NEXT"
-  // doesn't sit on a stale event. iOS still decides when to honour this.
-  const afterStart = new Date(next.startDate.getTime() + 60000);
-  const cap = new Date(Date.now() + 30 * 60000);
-  w.refreshAfterDate = afterStart > new Date() && afterStart < cap ? afterStart : cap;
+  if (family === "large") w.addSpacer();
+
+  // Roll forward when the next event starts, so a finished shift doesn't sit at
+  // the top of the list. iOS still decides when to honour this.
+  const upcoming = events.filter(e => !e.isAllDay && e.startDate > now)[0];
+  const cap = new Date(Date.now() + 15 * 60000);
+  const at = upcoming ? new Date(upcoming.startDate.getTime() + 60000) : cap;
+  w.refreshAfterDate = at < cap ? at : cap;
   return w;
 }
 
 /* ---------- run ---------- */
-let events = [], error = null;
-try {
-  events = await loadEvents();
-} catch (e) {
-  error = e;
-}
 
-const widget = build(events, error);
-if (config.runsInWidget) Script.setWidget(widget);
-else await widget.presentSmall();
-Script.complete();
+let token = getToken();
+
+// Tapped a checkbox: flip it, then get out of the way. Nothing is drawn.
+if (!config.runsInWidget && args.queryParameters && args.queryParameters.toggle) {
+  if (token) {
+    try {
+      await runToggle(token, args.queryParameters.toggle, args.queryParameters.ymd || null);
+    } catch (e) {
+      // Silent by design — this path exists only to make a tap feel free. The
+      // app reconciles from the Worker either way, and an alert here would sit
+      // on screen after the user has already looked away.
+    }
+  }
+  Script.complete();
+} else {
+  // Only prompt when a person is actually looking at the script; a widget
+  // refresh can't answer an alert.
+  if (!token && !config.runsInWidget) token = await promptForToken();
+
+  const from = startOfDay(new Date());
+  let events = [], todos = [], note = null;
+
+  try {
+    events = await loadRange(from, addDays(from, 1));
+  } catch (e) {
+    note = /denied|permission|access/i.test(e.message || "") ? "NO CALENDAR ACCESS" : "CALENDAR ERROR";
+  }
+
+  if (!token) {
+    note = "NO TOKEN";
+  } else {
+    try {
+      todos = await loadTodos(token, ymd(from));
+    } catch (e) {
+      note = "OFFLINE";
+    }
+    // Best effort, and last: a failed mirror must not cost the user the widget.
+    try {
+      await pushMirror(token);
+    } catch (e) {}
+  }
+
+  const widget = build(events, todos, note);
+  if (config.runsInWidget) Script.setWidget(widget);
+  else await widget.presentMedium();
+  Script.complete();
+}

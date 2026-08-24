@@ -42,6 +42,7 @@ That's why **Scan a Schedule** launches the shortcut with no input and the *shor
 | `SHORTCUT.md` | `Grid Quick Add` — typed sentence → one event (on-device) |
 | `CAPTURE.md` | `Grid Scan` — photo of a schedule → many events (needs an API key) |
 | `SIRI.md` | `Grid Todo` — spoken to-do items, and the voice trigger for `Grid Quick Add` |
+| `WIDGET.md` | The Scriptable widget — today's schedule, tickable to-dos, and the calendar mirror that fills the app's day view |
 | `BUILD.md` | This file |
 
 ---

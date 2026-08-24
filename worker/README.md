@@ -17,6 +17,9 @@ on it — if this is down, Grid works exactly as it does today.
 | POST   | `/todo`      | bearer | `{text, date?}` from Siri/Shortcuts; queues one to-do item |
 | GET    | `/inbox`     | bearer | returns `{items}` — the queued to-dos the app hasn't taken yet |
 | POST   | `/inbox/ack` | bearer | `{ids:[…]}`; deletes exactly those items from the queue |
+| PUT    | `/events`    | bearer | flattened Apple Calendar mirror pushed by the Scriptable widget |
+| GET    | `/events`    | bearer | returns `{syncedAt, events}` for the app's day view |
+| POST   | `/todo/toggle` | bearer | `{id, ymd?}` from a widget tap; flips the item and queues the same flip for the app |
 
 A `scheduled` cron (`*/30 * * * *`) checks the evening habit nag once `TIMEZONE`
 (an IANA name, e.g. `America/Denver`) is set as a var — without it, it no-ops.
@@ -40,6 +43,23 @@ onto tomorrow.
 Ack is by id rather than a blind clear, so an item spoken between the app's GET
 and its ack survives. The app also dedupes on that id, so a failed ack costs
 nothing but a repeat drain. The queue is capped at 200 items, oldest dropped.
+
+### The calendar mirror
+
+iOS gives a web app no calendar access, so the PWA cannot draw an hour-by-hour
+day without help. The Scriptable widget is native, reads EventKit, and PUTs a
+flattened copy here on every refresh: one entry per day an event covers, with
+times already resolved to the phone's wall clock as minutes from midnight.
+Neither this Worker nor the app then does any timezone math on someone else's
+calendar. Entries whose minutes don't validate are dropped rather than stored
+with null times, which would make them look like all-day events downstream.
+
+`/todo/toggle` exists because a widget can't reach `localStorage` either. It
+flips the item on the mirrored state — which is what the widget itself reads
+back, so the change is visible immediately — and queues the same flip on the
+inbox. The app applies the queue on its next drain, so both sides converge on
+whatever the tap did. The queued op carries the value it landed on rather than
+"flip it", so replaying one can't drift out of step.
 
 ## Local test (no Cloudflare account needed)
 
