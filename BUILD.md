@@ -85,9 +85,20 @@ Calendar app → **Calendars** → **Add Calendar…**. Create five, spelled exa
 |---|---|---|
 | `Work` | Blue | Shifts — irregular, from GroupMe, entered manually |
 | `Cheer` | Pink | Practices and events |
-| `Classes` | Purple | Fixed weekly class schedule, recurring |
-| `Habits` | Orange | The to-do accent; still a calendar you can file events under |
-| `Personal` | Green | Family, appointments, downtime |
+| `Classes` | Green | Fixed weekly class schedule, recurring |
+| `Personal` | Blue | Family, appointments, downtime |
+| `Habits` | Blue | Kept so old events still have a home |
+
+Grid itself only ever draws four colours, and each means exactly one thing:
+
+| Color | Means |
+|---|---|
+| Blue | The calendar — dates, hours, events, anything with a time |
+| Orange | The to-do list, wherever it appears |
+| Green | Classes |
+| Pink | Cheer |
+
+`Personal` and any calendar Grid doesn't recognise take blue, because they're still scheduled things. A calendar's own iOS tint is deliberately ignored — a calendar you coloured purple in Settings still draws blue here rather than inventing a fifth meaning. Red appears only on a destructive button, never as a category. A to-do is never given a slot on the hour grid: it lives in the **Anytime** column, which is the whole distinction between the two lists.
 
 Apple's color presets won't match the app's hex values exactly. Doesn't matter.
 

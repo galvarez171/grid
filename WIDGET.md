@@ -53,7 +53,7 @@ Rows beyond the cap collapse into a `+N more` line.
 
 | Marker | Means |
 |---|---|
-| `LATE` (pink) | Rolled over from an earlier day and still not done |
+| `LATE` | Rolled over from an earlier day and still not done |
 | `WKLY` | A weekly repeat, projected onto today |
 | Dimmed event | Already finished |
 

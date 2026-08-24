@@ -13,11 +13,20 @@
 <style>
 :root{
   --bg:#05070A; --panel:#0A0E14; --panel2:#0D131B;
-  --line:#1B2734; --line2:#2A3B4D;
-  /* Raised across the board: the old ramp bottomed out at #38454F, which on a
-     phone in daylight was effectively invisible against #05070A. */
-  --txt:#E8F1F8; --dim:#9DB0C2; --dimmer:#72859A;
-  --work:#00B4FF; --cheer:#FF2D95; --classes:#A855F7; --habits:#FF8A1E; --personal:#22E39A;
+  --line:#22303F; --line2:#33475C;
+  /* Raised twice now. The original ramp bottomed out at #38454F — roughly
+     2.4:1 against #05070A, invisible on a phone in daylight. Nothing here is
+     below 7:1 any more. */
+  --txt:#F2F8FD; --dim:#C3D2E0; --dimmer:#A2B4C6;
+  /* One colour per meaning, and only these four:
+       blue   — the calendar: dates, hours, events, anything scheduled
+       orange — the to-do list, wherever it appears
+       green  — classes
+       pink   — cheer
+     Personal and unrecognised calendars fall to blue, because they are still
+     scheduled things. Red is not a category, only the destructive action. */
+  --work:#00B4FF; --cheer:#FF2D95; --classes:#22E39A; --habits:#FF8A1E;
+  --warn:#FF4D4D;
   --pad:14px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -101,7 +110,7 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
 }
 .day.pad{color:var(--dimmer);opacity:.3}
 .day.today{border-color:var(--work);color:var(--txt);box-shadow:inset 0 0 12px -6px var(--work)}
-.day.open{border-color:var(--habits);color:var(--txt);box-shadow:inset 0 0 12px -6px var(--habits)}
+.day.open{border-color:var(--txt);color:var(--txt);box-shadow:inset 0 0 12px -7px var(--txt)}
 .dots{display:flex;gap:2px;height:4px}
 .dot{width:4px;height:4px;background:var(--c);box-shadow:0 0 4px var(--c)}
 
@@ -189,8 +198,8 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
 /* ---------- checklist ---------- */
 .chk{display:flex;align-items:flex-start;gap:10px;padding:9px 0;cursor:pointer}
 .chk + .chk{border-top:1px solid var(--line)}
-.cbox{flex:0 0 auto;width:16px;height:16px;border:1px solid var(--c,var(--personal));margin-top:1px;display:grid;place-items:center}
-.cbox::after{content:"";width:7px;height:7px;background:var(--c,var(--personal));opacity:0;box-shadow:0 0 8px var(--c,var(--personal))}
+.cbox{flex:0 0 auto;width:16px;height:16px;border:1px solid var(--c,var(--habits));margin-top:1px;display:grid;place-items:center}
+.cbox::after{content:"";width:7px;height:7px;background:var(--c,var(--habits));opacity:0;box-shadow:0 0 8px var(--c,var(--habits))}
 .chk[aria-checked="true"] .cbox::after,.cbox[aria-checked="true"]::after{opacity:1}
 .chk[aria-checked="true"] .ctxt,.td[aria-checked="true"] .ctxt{color:var(--dimmer);text-decoration:line-through}
 
@@ -220,7 +229,7 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
   padding:10px 0 2px;border-top:1px solid var(--line);margin-top:4px
 }
 .tdgrp:first-child{border-top:0;margin-top:0;padding-top:0}
-.tdgrp.late{color:var(--cheer)}
+.tdgrp.late{color:var(--habits)}
 /* The origin date of a rolled-over item. Without it an overdue row is
    indistinguishable from one you added today. */
 .tdwhen{font-size:10px;color:var(--dimmer);letter-spacing:.1em;margin-left:6px;white-space:nowrap}
@@ -236,7 +245,7 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
   padding:7px 9px;cursor:pointer;border-radius:0;-webkit-appearance:none
 }
 .tdacts input{text-transform:none;color:var(--txt);-webkit-user-select:text;user-select:text}
-.tdacts button.warn{color:var(--cheer);border-color:rgba(255,45,149,.35)}
+.tdacts button.warn{color:var(--warn);border-color:rgba(255,77,77,.4)}
 /* The repeat picker only earns its space once you're typing something. */
 .tdrepbar{display:flex;align-items:center;gap:9px;margin-top:9px}
 .tdrepbar .lbl{flex:0 0 auto}
@@ -251,13 +260,13 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
   -webkit-user-select:text;user-select:text;border-radius:0;-webkit-appearance:none;
   max-width:190px;
 }
-.field input:focus{outline:none;border-color:var(--cheer)}
+.field input:focus{outline:none;border-color:var(--work)}
 .days{display:flex;gap:4px}
 .days button{
   width:28px;height:28px;background:transparent;border:1px solid var(--line2);
   color:var(--dim);font:400 11px/1 ui-monospace,monospace;cursor:pointer;
 }
-.days button[aria-pressed="true"]{border-color:var(--c,var(--classes));color:var(--c,var(--classes));box-shadow:0 0 10px -4px var(--c,var(--classes))}
+.days button[aria-pressed="true"]{border-color:var(--c,var(--habits));color:var(--c,var(--habits));box-shadow:0 0 10px -4px var(--c,var(--habits))}
 
 /* ---------- toast ---------- */
 #toast{
@@ -282,7 +291,7 @@ footer button{
   padding:11px;outline:none;-webkit-user-select:text;user-select:text;
   border-radius:0;-webkit-appearance:none;
 }
-#syncInput:focus{border-color:var(--personal);box-shadow:0 0 0 1px rgba(34,227,154,.25)}
+#syncInput:focus{border-color:var(--work);box-shadow:0 0 0 1px rgba(0,180,255,.25)}
 #syncInput::placeholder{color:var(--dimmer)}
 
 /* ---------- motion ----------
@@ -291,9 +300,9 @@ footer button{
 
 /* A ticked box pulses instead of snapping, so the tap registers. */
 @keyframes boxpulse{
-  0%  {transform:scale(1);   box-shadow:0 0 10px -4px var(--c,var(--personal))}
-  40% {transform:scale(1.16);box-shadow:0 0 18px 1px var(--c,var(--personal))}
-  100%{transform:scale(1);   box-shadow:0 0 10px -4px var(--c,var(--personal))}
+  0%  {transform:scale(1);   box-shadow:0 0 10px -4px var(--c,var(--habits))}
+  40% {transform:scale(1.16);box-shadow:0 0 18px 1px var(--c,var(--habits))}
+  100%{transform:scale(1);   box-shadow:0 0 10px -4px var(--c,var(--habits))}
 }
 .cbox.pulse{animation:boxpulse .34s ease-out}
 
@@ -353,8 +362,8 @@ body::before{animation:drift 7s linear infinite}
   </section>
 
   <!-- MONTH -->
-  <section class="panel" style="--c:var(--classes)">
-    <div class="phead"><i class="tick" style="--c:var(--classes)"></i><h2 id="calTitle" role="button" tabindex="0" style="cursor:pointer">Month</h2>
+  <section class="panel" style="--c:var(--work)">
+    <div class="phead"><i class="tick" style="--c:var(--work)"></i><h2 id="calTitle" role="button" tabindex="0" style="cursor:pointer">Month</h2>
       <span class="lbl" style="margin-left:auto;color:var(--dimmer)">tap for today</span></div>
     <div class="pbody">
       <div class="calhead">
@@ -371,8 +380,8 @@ body::before{animation:drift 7s linear infinite}
   </section>
 
   <!-- SUNDAY RESET -->
-  <section class="panel" style="--c:var(--personal)">
-    <div class="phead"><i class="tick" style="--c:var(--personal)"></i><h2>Sunday Reset</h2></div>
+  <section class="panel" style="--c:var(--habits)">
+    <div class="phead"><i class="tick" style="--c:var(--habits)"></i><h2>Sunday Reset</h2></div>
     <div class="pbody" id="reset"></div>
   </section>
 
@@ -407,7 +416,7 @@ body::before{animation:drift 7s linear infinite}
       <input id="qaInput" type="text" placeholder="dentist thursday 2pm"
              autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go">
       <a class="btn" id="qaBtn" style="--c:var(--work)" href="#">Send to Calendar</a>
-      <a class="btn" id="scanBtn" style="--c:var(--cheer)" href="#">Scan a Schedule</a>
+      <a class="btn" id="scanBtn" style="--c:var(--work)" href="#">Scan a Schedule</a>
       <div class="hint" id="qaHint">One sentence goes to <b>Grid Quick Add</b>. A photo of a schedule goes to <b>Grid Scan</b>, which reads every shift at once. Both show you what they found before writing anything.</div>
     </div>
   </section>
@@ -415,13 +424,13 @@ body::before{animation:drift 7s linear infinite}
   <!-- A real field rather than prompt(), which offers no way to switch off
        autocapitalisation — it silently uppercased the token's first letter. -->
   <section class="panel" id="syncPanel" hidden>
-    <div class="phead" style="--c:var(--personal)"><i class="tick"></i><h2>Sync token</h2></div>
+    <div class="phead" style="--c:var(--work)"><i class="tick"></i><h2>Sync token</h2></div>
     <div class="pbody">
       <input id="syncInput" type="text" inputmode="verbatim" autocapitalize="off"
              autocorrect="off" autocomplete="off" spellcheck="false" placeholder="paste token">
       <div class="hint" id="syncHint" style="margin-top:8px"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn" id="syncSave" style="--c:var(--personal)">Save</button>
+        <button class="btn" id="syncSave" style="--c:var(--work)">Save</button>
         <button class="btn" id="syncCancel">Cancel</button>
       </div>
     </div>
@@ -501,7 +510,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v16";
+const APP_VERSION = "v17";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -758,9 +767,9 @@ function renderToday(){
     .concat((S.todos[key] || []).filter(x => !x.done).map(x => ({ t:x.t })));
   $("#tTodos").innerHTML = open.length
     ? open.slice(0,5).map(x => `<div class="trow">
-        <i class="tdotc" style="--c:var(${x.late ? "--cheer" : "--habits"})"></i>
+        <i class="tdotc" style="--c:var(--habits)"></i>
         <span class="tt">${esc(x.t)}</span>
-        ${x.late ? `<span class="th" style="color:var(--cheer)">LATE</span>`
+        ${x.late ? `<span class="th" style="color:var(--habits)">LATE</span>`
                  : x.wk ? `<span class="th">WKLY</span>` : ""}
       </div>`).join("") + (open.length > 5 ? `<div class="tnone">+${open.length-5} more</div>` : "")
     : `<div class="tnone">Nothing left today.</div>`;
@@ -1064,12 +1073,13 @@ const HOUR_PX = 34;
 const CIRCUITS = [
   [/work|shift|job/i, "--work"],
   [/cheer/i, "--cheer"],
-  [/class|school|course|lecture/i, "--classes"],
-  [/personal|life|home/i, "--personal"]
+  [/class|school|course|lecture/i, "--classes"]
 ];
 function calColor(name){
   for(const [re,v] of CIRCUITS) if(re.test(name||"")) return v;
-  return "--habits";
+  // Personal, and anything unrecognised, is still something scheduled — so it
+  // takes the calendar's blue. Orange is reserved for the to-do list.
+  return "--work";
 }
 const hhmm = m => {
   const h = Math.floor(m/60), mm = m%60, ap = h < 12 ? "am" : "pm";
@@ -1162,7 +1172,7 @@ function renderSheet(){
       + `</div>` : ""}
     <div class="scols">
       <div>
-        <div class="ssec">Anytime</div>
+        <div class="ssec">Anytime · no set time</div>
         ${dayList}
       </div>
       <div>
@@ -1251,7 +1261,7 @@ $("#syncInput").addEventListener("input", ()=>{
   if(!n){ syncHint(); return; }
   const ok = n === TOKEN_LEN;
   $("#syncHint").textContent = n+" / "+TOKEN_LEN+(ok ? " — looks right" : n < TOKEN_LEN ? " — too short, copy again" : " — too long");
-  $("#syncHint").style.color = ok ? "var(--personal)" : "var(--cheer)";
+  $("#syncHint").style.color = ok ? "var(--work)" : "var(--warn)";
 });
 $("#btnSync").onclick = ()=>{
   const p = $("#syncPanel");

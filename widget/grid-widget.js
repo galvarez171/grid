@@ -27,18 +27,19 @@ const MAX_TODO_ROWS = { medium: 3, large: 6 };
 
 // Grid's circuit colors, matched against the calendar's name so the widget
 // reads as the same product as the app.
+// One colour per meaning, matching the app exactly: blue is the calendar,
+// orange is the to-do list, green is classes, pink is cheer. Personal and
+// unrecognised calendars fall to blue — they are still scheduled things.
 const CIRCUITS = [
-  [/work|shift|job/i, "#00B4FF"],
   [/cheer/i, "#FF2D95"],
-  [/class|school|course|lecture/i, "#A855F7"],
-  [/personal|life|home/i, "#22E39A"]
+  [/class|school|course|lecture/i, "#22E39A"]
 ];
+const CAL = "#00B4FF";        // every other calendar, including Work
 const BG = "#05070A";
-const TXT = "#C9D6E2";
-const DIM = "#5A6B7A";
-const DIMMER = "#38454F";
+const TXT = "#F2F8FD";
+const DIM = "#C3D2E0";
+const DIMMER = "#A2B4C6";
 const ACCENT = "#FF8A1E";     // to-dos, matching the app's To-Do panel
-const FALLBACK = "#22E39A";
 
 /* ---------- token ---------- */
 
@@ -81,11 +82,13 @@ const pad = n => String(n).padStart(2, "0");
 const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const minutes = d => d.getHours() * 60 + d.getMinutes();
 
+// Deliberately ignores the calendar's own iOS colour: the point is that Grid
+// only ever shows these four, so a calendar tinted purple in Settings still
+// reads as blue here rather than introducing a fifth meaning.
 function eventColor(ev) {
   const name = (ev.calendar && ev.calendar.title) || "";
   for (const [re, hex] of CIRCUITS) if (re.test(name)) return hex;
-  const c = ev.calendar && ev.calendar.color;
-  return c ? "#" + c.hex.replace(/^#/, "") : FALLBACK;
+  return CAL;
 }
 
 async function loadRange(from, to) {
@@ -214,11 +217,11 @@ function todoRow(w, item) {
   const row = w.addStack();
   row.centerAlignContent();
   row.url = toggleURL(item);          // the tap target is the whole row
-  const box = addLine(row, "☐ ", item.late ? "#FF2D95" : ACCENT, 11, false);
+  const box = addLine(row, "☐ ", ACCENT, 11, false);
   box.lineLimit = 1;
   addLine(row, item.t, TXT, 10, false);
   row.addSpacer();
-  if (item.late) addLine(row, "LATE", "#FF2D95", 8, true);
+  if (item.late) addLine(row, "LATE", ACCENT, 8, true);
   else if (item.ymd) addLine(row, "WKLY", DIMMER, 8, false);
   w.addSpacer(3);
 }
@@ -239,7 +242,7 @@ function build(events, todos, note) {
   const now = new Date();
   const header = w.addStack();
   header.centerAlignContent();
-  addLine(header, "GRID", FALLBACK, 10, true);
+  addLine(header, "GRID", CAL, 10, true);
   header.addSpacer();
   addLine(header, fmtToday(now), DIM, 9, false);
 
