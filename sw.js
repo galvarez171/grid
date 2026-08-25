@@ -1,5 +1,5 @@
 // Grid — offline shell. Bump CACHE on every deploy or phones keep the old app.
-const CACHE = "grid-v20";
+const CACHE = "grid-v21";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon-180.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {

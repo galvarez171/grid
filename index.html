@@ -398,7 +398,7 @@ body::before{animation:drift 7s linear infinite}
         </div>
       </div>
       <div class="cal" id="cal"></div>
-      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Dots: blue = events, green = course dates, orange = open to-dos.</div>
+      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Dots: blue = events, green = course dates, pink = cheer, orange = open to-dos.</div>
       <div class="sheet" id="daySheet" hidden></div>
     </div>
   </section>
@@ -519,6 +519,11 @@ const DEFAULT = {
   // writing out sixteen weeks of blocks would mean rewriting all of them
   // every time a time changed.
   classes: [],          // [{id,t,dows:[0-6],s,e,from,to,skip:[]}]
+  // One-off commitments the mirror can't hold either — games, field
+  // practices, the date the squad reports back. Same idea as classes, but
+  // pinned to a single date instead of a weekday. A game whose kickoff is
+  // still TBD is stored all-day rather than parked at a made-up hour.
+  fixtures: [],         // [{id,t,d,s,e,allDay}]
   // One flag per built-in batch. It's what stops a second pour: delete a
   // seeded mark or item and it stays deleted.
   seeded: {}
@@ -563,7 +568,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v20";
+const APP_VERSION = "v21";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -630,8 +635,16 @@ function classesFor(key){
   return out;
 }
 
+/* Cheer's own dates. cal:"cheer" is what turns them pink, the one colour the
+   rules reserve for it. */
+function fixturesFor(key){
+  return (S.fixtures || [])
+    .filter(f => f.d === key)
+    .map(f => ({ t:f.t, s:f.s, e:f.e, allDay:!!f.allDay, cal:"cheer" }));
+}
+
 /* Everything that occupies time on a day: the Apple Calendar mirror plus the
-   class grid. A class the user also keeps in Apple Calendar would otherwise
+   class grid and the cheer fixtures. A class the user also keeps in Apple Calendar would otherwise
    draw twice, so a mirrored event starting within five minutes and carrying
    the course code wins — the mirror is the truth wherever both exist. */
 function dayEvents(key){
@@ -641,7 +654,7 @@ function dayEvents(key){
     return !mirrored.some(e => !e.allDay && Math.abs((e.s || 0) - c.s) <= 5
                             && String(e.t || "").toUpperCase().includes(code));
   });
-  return mirrored.concat(mine)
+  return mirrored.concat(mine, fixturesFor(key))
     .sort((a,b) => (a.allDay?-1:0)-(b.allDay?-1:0) || (a.s||0)-(b.s||0));
 }
 
@@ -1002,11 +1015,13 @@ function renderCal(){
                   || repeatsFor(key).some(r => !repeatDone(key, r.id));
     const busy = eventsOn(key).length;
     const course = marksOn(key).length;
+    const cheer  = fixturesFor(key).length;
     if(openTodo) marked++;
     html += `<div class="day ${key===tk?"today":""}${key===sheetDate?" open":""}" data-day="${key}">
       <span>${d}</span><span class="dots">${
         busy ? `<i class="dot" style="--c:var(--work)"></i>` : ""}${
         course ? `<i class="dot" style="--c:var(--classes)"></i>` : ""}${
+        cheer ? `<i class="dot" style="--c:var(--cheer)"></i>` : ""}${
         openTodo ? `<i class="dot" style="--c:var(--habits)"></i>` : ""}</span></div>`;
   }
   $("#cal").innerHTML = html;
@@ -1205,6 +1220,57 @@ const CLASSES26 = [
   { id:"c26-mgt",  t:"MGT 3370",  dows:[2,4],   s:17*60, e:18*60+30 }
 ];
 
+/* The cheer calendar, and only the four kinds asked for: football games, home
+   men's basketball, field practices, and the report-back dates. The 6am cheer
+   practices are deliberately absent — they are every weekday and would bury
+   everything else.
+
+   Kickoffs come from the published football schedule rather than the photo:
+   the printed calendar gives the day but not the hour, and three of these are
+   not Saturday games. Anything still TBD is all-day on purpose.
+
+   Field practice is 7pm two days before each home game, which is what the
+   printed calendar shows for all seven of them. */
+const G = (id, d, t, s, e) => ({ id, d, t, s, e, allDay: s == null });
+const CHEER26 = [
+  // football
+  G("cf-01","2026-09-05","Football vs. Abilene Christian", 18*60, 21*60),
+  G("cf-02","2026-09-12","Football @ Oregon State",        18*60+30, 21*60+30),
+  G("cf-03","2026-09-18","Football vs. Houston",           19*60, 22*60),
+  G("cf-04","2026-09-26","Football vs. Sam Houston"),
+  G("cf-05","2026-10-03","Football @ Colorado"),
+  G("cf-06","2026-10-17","Football vs. Arizona State — Homecoming"),
+  G("cf-07","2026-10-24","Football @ Cincinnati"),
+  G("cf-08","2026-10-31","Football vs. Arizona"),
+  G("cf-09","2026-11-07","Football vs. West Virginia"),
+  G("cf-10","2026-11-14","Football @ Oklahoma State"),
+  G("cf-11","2026-11-21","Football @ Baylor"),
+  G("cf-12","2026-11-26","Football vs. TCU",               19*60, 22*60),
+  G("cf-13","2026-12-04","Football Big 12 Championship — only if Tech qualifies"),
+  // field practice, 7pm, two days before each home game
+  G("fp-01","2026-09-03","Field practice",                 19*60, 20*60),
+  G("fp-02","2026-09-16","Field practice",                 19*60, 20*60),
+  G("fp-03","2026-09-24","Field practice",                 19*60, 20*60),
+  G("fp-04","2026-10-15","Field practice",                 19*60, 20*60),
+  G("fp-05","2026-10-29","Field practice",                 19*60, 20*60),
+  G("fp-06","2026-11-05","Field practice",                 19*60, 20*60),
+  G("fp-07","2026-11-24","Field practice",                 19*60, 20*60),
+  // RR — home men's basketball
+  G("rr-01","2026-11-02","RR game vs. Jackson State"),
+  G("rr-02","2026-11-05","RR game vs. Bethune-Cookman"),
+  G("rr-03","2026-11-10","RR game vs. Illinois"),
+  G("rr-04","2026-11-14","RR game vs. Stonehill"),
+  G("rr-05","2026-11-18","RR game vs. New Orleans"),
+  G("rr-06","2026-12-08","RR game vs. Omaha"),
+  G("rr-07","2026-12-15","RR game vs. Incarnate Word"),
+  G("rr-08","2026-12-21","RR game vs. Duke — Madison Square Garden"),
+  G("rr-09","2026-12-28","RR game vs. Mississippi Valley State"),
+  G("rr-10","2027-01-04","RR game — Big 12 opener, opponent TBA"),
+  // report back
+  G("rb-01","2026-11-29","Report back — no practice"),
+  G("rb-02","2027-01-06","Report back")
+];
+
 /* One seeder, a flag per batch, so a phone that already took the course dates
    still gets the class grid on the next launch. */
 function seedFall2026(){
@@ -1230,6 +1296,15 @@ function seedFall2026(){
     }
     S.seeded.fall2026classes = true;
     did.push("class times");
+  }
+
+  if(!S.seeded.cheer2026){
+    S.fixtures = S.fixtures || [];
+    for(const f of CHEER26){
+      if(!S.fixtures.some(x => x.id === f.id)) S.fixtures.push(f);
+    }
+    S.seeded.cheer2026 = true;
+    did.push("cheer dates");
   }
 
   if(!did.length) return;
