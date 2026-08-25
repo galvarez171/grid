@@ -513,6 +513,12 @@ const DEFAULT = {
   // over onto today forever. A mark is what the day IS; the to-do beside it
   // (where there is one) is what you have to do about it.
   marks: {},            // "YYYY-MM-DD" -> [{id,c,t}]
+  // A class meets at the same time every week for a whole term, which is
+  // neither a one-off mark nor a mirrored event. Stored as a pattern and
+  // projected onto a day at render time, the same trick repeats uses —
+  // writing out sixteen weeks of blocks would mean rewriting all of them
+  // every time a time changed.
+  classes: [],          // [{id,t,dows:[0-6],s,e,from,to,skip:[]}]
   // One flag per built-in batch. It's what stops a second pour: delete a
   // seeded mark or item and it stays deleted.
   seeded: {}
@@ -557,7 +563,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v19";
+const APP_VERSION = "v20";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -606,6 +612,38 @@ async function pullEvents(){
 const eventsOn = key => EV.events
   .filter(e => e.d === key)
   .sort((a,b) => (a.allDay?-1:0)-(b.allDay?-1:0) || (a.s||0)-(b.s||0));
+
+/* Which classes meet on a given day. Minutes from local midnight, to match
+   the shape the widget flattens Apple Calendar into — so a class block and a
+   mirrored event are interchangeable everywhere downstream. */
+function classesFor(key){
+  const dow = parseYmd(key).getDay();
+  const out = [];
+  for(const c of S.classes || []){
+    if(!c.dows.includes(dow)) continue;
+    if(key < c.from || key > c.to) continue;      // outside the term
+    if((c.skip || []).includes(key)) continue;    // Labor Day, Thanksgiving, career fair
+    // "class" is what calColor matches on, so these take the classes green
+    // without the colour rules having to learn about a second kind of event.
+    out.push({ t:c.t, s:c.s, e:c.e, allDay:false, cal:"class" });
+  }
+  return out;
+}
+
+/* Everything that occupies time on a day: the Apple Calendar mirror plus the
+   class grid. A class the user also keeps in Apple Calendar would otherwise
+   draw twice, so a mirrored event starting within five minutes and carrying
+   the course code wins — the mirror is the truth wherever both exist. */
+function dayEvents(key){
+  const mirrored = eventsOn(key);
+  const mine = classesFor(key).filter(c => {
+    const code = c.t.split(" ")[0].toUpperCase();
+    return !mirrored.some(e => !e.allDay && Math.abs((e.s || 0) - c.s) <= 5
+                            && String(e.t || "").toUpperCase().includes(code));
+  });
+  return mirrored.concat(mine)
+    .sort((a,b) => (a.allDay?-1:0)-(b.allDay?-1:0) || (a.s||0)-(b.s||0));
+}
 
 /* Siri and the Share Sheet can't PUT the whole state — they only know the one
    line that was just spoken — so they append to a queue on the Worker and this
@@ -802,7 +840,7 @@ function renderToday(){
   $("#tMarks").innerHTML = marksHtml(key, 3);
 
   const nowMin = now.getHours()*60 + now.getMinutes();
-  const evs = eventsOn(key);
+  const evs = dayEvents(key);
   $("#tEvents").innerHTML = evs.length
     ? evs.slice(0,5).map(e => `<div class="trow${!e.allDay && e.e <= nowMin ? " past" : ""}">
         <i class="tdotc" style="--c:var(${calColor(e.cal)})"></i>
@@ -1152,20 +1190,53 @@ const FALL26 = [
   ["2026-12-08", "SCM",  "Exam #3 — window Dec 8–9, RTC 8am–10pm (Ch. 7–10)",      "Sit SCM Exam #3 at the RTC — window shuts Dec 9"]
 ];
 
+/* The weekly grid, read off the registrar's schedule. SCM at 9:00 is what
+   pins the section to 001; the syllabus lists three with different times.
+   Class blocks deliberately take no dot on the month grid — something on
+   every weekday would paint the month green and drown out the exam dates,
+   which are what the dots are for. */
+const TERM = { from: "2026-08-24", to: "2026-12-09" };
+const NO_CLASS = ["2026-09-07", "2026-11-25", "2026-11-26", "2026-11-27"];
+const CLASSES26 = [
+  { id:"c26-isqs", t:"ISQS 2377", dows:[1,3,5], s:8*60,  e:8*60+50  },
+  { id:"c26-scm",  t:"SCM 3353",  dows:[1,3,5], s:9*60,  e:9*60+50,
+    skip:["2026-09-30"] },                       // Rawls Career Fair, SCM only
+  { id:"c26-acct", t:"ACCT 2300", dows:[1,3,5], s:10*60, e:10*60+50 },
+  { id:"c26-mgt",  t:"MGT 3370",  dows:[2,4],   s:17*60, e:18*60+30 }
+];
+
+/* One seeder, a flag per batch, so a phone that already took the course dates
+   still gets the class grid on the next launch. */
 function seedFall2026(){
-  if(S.seeded.fall2026) return;
-  FALL26.forEach(([key, c, t, td], i) => {
-    const list = S.marks[key] = S.marks[key] || [];
-    const id = "f26-" + i;
-    if(!list.some(m => m.id === id)) list.push({ id, c, t });
-    if(td) addTodo(key, td, "f26t-" + i);
-  });
-  S.seeded.fall2026 = true;
+  const did = [];
+
+  if(!S.seeded.fall2026){
+    FALL26.forEach(([key, c, t, td], i) => {
+      const list = S.marks[key] = S.marks[key] || [];
+      const id = "f26-" + i;
+      if(!list.some(m => m.id === id)) list.push({ id, c, t });
+      if(td) addTodo(key, td, "f26t-" + i);
+    });
+    S.seeded.fall2026 = true;
+    did.push("course dates");
+  }
+
+  if(!S.seeded.fall2026classes){
+    S.classes = S.classes || [];
+    for(const c of CLASSES26){
+      if(S.classes.some(x => x.id === c.id)) continue;
+      S.classes.push({ ...c, from:TERM.from, to:TERM.to,
+                       skip: NO_CLASS.concat(c.skip || []) });
+    }
+    S.seeded.fall2026classes = true;
+    did.push("class times");
+  }
+
+  if(!did.length) return;
   save();
-  // Thirty-three dates and twenty-three items appearing out of nowhere reads
-  // as a glitch unless the app says it did it. After the boot flourish, so it
-  // isn't painted over.
-  setTimeout(()=>toast("Fall 2026 course dates added"), 900);
+  // Dates and blocks appearing out of nowhere read as a glitch unless the app
+  // says it did it. After the boot flourish, so it isn't painted over.
+  setTimeout(()=>toast("Fall 2026 " + did.join(" and ") + " added"), 900);
 }
 
 /* ============ to-do ============ */
@@ -1269,7 +1340,7 @@ function packColumns(evs){
 function renderSheet(){
   const key = sheetDate;
   if(!key){ $("#daySheet").hidden = true; return; }
-  const d = parseYmd(key), all = eventsOn(key);
+  const d = parseYmd(key), all = dayEvents(key);
   const timed  = all.filter(e => !e.allDay && e.s != null && e.e != null && e.e > e.s);
   const allDay = all.filter(e => e.allDay || e.s == null);
 
