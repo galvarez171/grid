@@ -150,6 +150,24 @@ test("nag names a rolled-over item ahead of the count", () => {
     '"library" has been waiting since before today.');
 });
 
+// A semester of dated items means several land here at once, and naming the
+// oldest one every night for weeks is how a notification stops being read.
+test("nag counts rolled-over items rather than naming one, once there are several", () => {
+  const state = { todos: {
+    "2026-08-17": [item("revel ch 1")],
+    "2026-08-19": [item("library")],
+    "2026-08-22": [item("a")]
+  } };
+  assert.equal(decideNotifications(state, eveningSat, {})[0].body,
+    "2 things have been waiting since before today.");
+});
+
+test("nag still names a rolled-over repeat alongside one late item", () => {
+  const state = { todos: { "2026-08-19": [item("library")] } };
+  assert.equal(decideNotifications(state, eveningSat, {})[0].body,
+    '"library" has been waiting since before today.');
+});
+
 test("nag stays silent when the list is clear", () => {
   const state = { todos: { "2026-08-22": [item("done one", true)] } };
   assert.deepEqual(decideNotifications(state, eveningSat, {}), []);

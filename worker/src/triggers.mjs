@@ -83,18 +83,23 @@ export function decideNotifications(state, parts, sent = {}) {
   if (!state) return out;
   const { ymd: todayYmd, hour, dow } = parts;
 
-  // Evening nag: what's still open on the to-do list. An item carried over
-  // from an earlier day is named directly — that's the one most likely to keep
-  // being ignored, and a count alone never says which.
+  // Evening nag: what's still open on the to-do list. One carried-over item is
+  // named directly — that's the one most likely to keep being ignored, and a
+  // count alone never says which. Several are counted instead: naming the
+  // oldest every night for weeks is how a notification stops being read, and
+  // a semester's worth of dated items makes that the normal case rather than
+  // the exception.
   if (hour >= 20 && sent.nag !== todayYmd) {
     const open = openTodos(state, todayYmd);
     if (open.length) {
-      const late = open.find(x => x.late);
-      const body = late
-        ? `"${late.t}" has been waiting since before today.`
-        : open.length === 1
-          ? `One thing left: ${open[0].t}`
-          : `${open.length} things still on today's list.`;
+      const late = open.filter(x => x.late);
+      const body = late.length > 1
+        ? `${late.length} things have been waiting since before today.`
+        : late.length === 1
+          ? `"${late[0].t}" has been waiting since before today.`
+          : open.length === 1
+            ? `One thing left: ${open[0].t}`
+            : `${open.length} things still on today's list.`;
       out.push({ key: "nag", ymd: todayYmd, title: "Grid", body });
     }
   }

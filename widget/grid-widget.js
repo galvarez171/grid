@@ -134,6 +134,56 @@ async function pushMirror(token) {
   await req.loadJSON();
 }
 
+/* ---------- Grid's own entries ---------- */
+
+/* Classes and cheer fixtures live in the app's state, not in Apple Calendar,
+   because the mirror here overwrites /events on every refresh. Without this
+   the lock screen said "nothing on the calendar" on a day with three lectures
+   and a game, while the app showed all four.
+
+   They're built to look exactly like an EventKit event — startDate, endDate,
+   isAllDay, title, calendar.title — so every drawing path below stays unaware
+   there are two sources. The calendar name is what eventColor matches on, so
+   "class" and "cheer" pick up the same green and pink the app uses. */
+function ownEvents(state, day) {
+  const key = ymd(day);
+  const dow = day.getDay();
+  const at = m => new Date(day.getTime() + m * 60000);
+  const mk = (t, s, e, allDay, cal) => ({
+    title: t,
+    isAllDay: !!allDay,
+    startDate: allDay ? day : at(s),
+    endDate: allDay ? addDays(day, 1) : at(e),
+    calendar: { title: cal }
+  });
+
+  const out = [];
+  for (const c of (state && state.classes) || []) {
+    if (!c.dows.includes(dow) || key < c.from || key > c.to) continue;
+    if ((c.skip || []).includes(key)) continue;
+    out.push(mk(c.t, c.s, c.e, false, "class"));
+  }
+  for (const f of (state && state.fixtures) || []) {
+    if (f.d !== key) continue;
+    out.push(mk(f.t, f.s, f.e, f.allDay, "cheer"));
+  }
+  return out;
+}
+
+/* The same rule the app uses: where the user also keeps a lecture or a game in
+   Apple Calendar, the mirrored copy wins, so it can't draw twice. */
+function mergeOwn(events, own) {
+  const kept = own.filter(o => !events.some(e => {
+    const after = String(o.title).split(/\s(?:vs\.?|@)\s/i)[1];
+    const k = (after || String(o.title)).split("\u2014")[0].trim().toLowerCase();
+    if (!k || !String(e.title || "").toLowerCase().includes(k)) return false;
+    if (o.isAllDay || e.isAllDay) return true;
+    return Math.abs(e.startDate - o.startDate) <= 5 * 60000;
+  }));
+  return events.concat(kept).sort((a, b) =>
+    (a.isAllDay ? 0 : 1) - (b.isAllDay ? 0 : 1) || a.startDate - b.startDate);
+}
+
 /* ---------- to-dos ---------- */
 
 // Mirrors the app's own rules: an unfinished item rolls forward until it's
@@ -157,9 +207,11 @@ function openTodosFor(state, key) {
   return out;
 }
 
-async function loadTodos(token, key) {
+// One fetch, two readers: the to-do list and the class/fixture projection both
+// come out of the same state blob, so the widget doesn't pay for it twice.
+async function loadState(token) {
   const res = await api("/state", token).loadJSON();
-  return openTodosFor(res && res.state, key);
+  return (res && res.state) || null;
 }
 
 /* ---------- the tap ---------- */
@@ -320,7 +372,11 @@ if (!config.runsInWidget && args.queryParameters && args.queryParameters.toggle)
     note = "NO TOKEN";
   } else {
     try {
-      todos = await loadTodos(token, ymd(from));
+      const state = await loadState(token);
+      todos = openTodosFor(state, ymd(from));
+      // Classes and fixtures are Grid's own, so they draw even when calendar
+      // access failed above — that's the whole point of not living in EventKit.
+      events = mergeOwn(events, ownEvents(state, from));
     } catch (e) {
       note = "OFFLINE";
     }

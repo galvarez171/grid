@@ -39,8 +39,9 @@ const pad = n => String(n).padStart(2, "0");
 const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const minutes = d => d.getHours() * 60 + d.getMinutes();
 `;
-const { flatten, openTodosFor } = new Function(
-  helpers + lift("flatten") + lift("openTodosFor") + "return { flatten, openTodosFor };"
+const { flatten, openTodosFor, ownEvents, mergeOwn } = new Function(
+  helpers + lift("flatten") + lift("openTodosFor") + lift("ownEvents") + lift("mergeOwn")
+  + "return { flatten, openTodosFor, ownEvents, mergeOwn };"
 )();
 
 const ev = (title, s, e, allDay, cal) => ({
@@ -145,4 +146,86 @@ test("openTodosFor respects a repeat already ticked for that date", () => {
 test("openTodosFor tolerates an empty or missing state", () => {
   assert.deepEqual(openTodosFor(null, "2026-08-24"), []);
   assert.deepEqual(openTodosFor({}, "2026-08-24"), []);
+});
+
+/* ---------- classes and fixtures ----------
+   These live in the app's state rather than in EventKit, because the mirror
+   this widget pushes would overwrite them. Without the projection the lock
+   screen claimed an empty day while the app showed three lectures. */
+
+const wed = new Date(2026, 8, 2);        // Wednesday 2 Sep 2026
+const tue = new Date(2026, 8, 1);
+const mon = new Date(2026, 8, 7);        // Labor Day, in the skip list
+const term = { from: "2026-08-24", to: "2026-12-09" };
+const isqs = { id: "c", t: "ISQS 2377", dows: [1, 3, 5], s: 480, e: 530,
+               ...term, skip: ["2026-09-07"] };
+const mgt  = { id: "m", t: "MGT 3370", dows: [2, 4], s: 1020, e: 1110, ...term, skip: [] };
+const titles = evs => evs.map(e => e.title);
+
+test("ownEvents projects a class onto a day it meets", () => {
+  const [ev] = ownEvents({ classes: [isqs] }, wed);
+  assert.equal(ev.title, "ISQS 2377");
+  assert.equal(ev.isAllDay, false);
+  assert.equal(ev.startDate.getHours(), 8);
+  assert.equal(ev.endDate.getHours(), 8);
+  assert.equal(ev.endDate.getMinutes(), 50);
+  // The calendar name is what picks the colour, and must stay matchable.
+  assert.equal(ev.calendar.title, "class");
+});
+
+test("ownEvents skips a day in the class's skip list", () => {
+  assert.deepEqual(titles(ownEvents({ classes: [isqs] }, mon)), []);
+});
+
+test("ownEvents ignores a weekday the class does not meet", () => {
+  assert.deepEqual(titles(ownEvents({ classes: [isqs, mgt] }, tue)), ["MGT 3370"]);
+});
+
+test("ownEvents respects the term bounds at both ends", () => {
+  assert.deepEqual(titles(ownEvents({ classes: [isqs] }, new Date(2026, 7, 21))), []);
+  assert.deepEqual(titles(ownEvents({ classes: [isqs] }, new Date(2026, 11, 11))), []);
+});
+
+test("ownEvents gives a fixture with no kickoff an all-day span", () => {
+  const [ev] = ownEvents({ fixtures: [
+    { id: "f", t: "Football vs. Sam Houston", d: "2026-09-02", allDay: true }
+  ] }, wed);
+  assert.equal(ev.isAllDay, true);
+  assert.equal(ev.calendar.title, "cheer");
+  assert.equal(ev.startDate.getTime(), wed.getTime());
+  assert.equal(ev.endDate.getDate(), 3);
+});
+
+test("ownEvents tolerates an empty or missing state", () => {
+  assert.deepEqual(ownEvents(null, wed), []);
+  assert.deepEqual(ownEvents({}, wed), []);
+});
+
+test("mergeOwn drops a class the user also keeps in Apple Calendar", () => {
+  const mirrored = [ev("ISQS 2377 Lecture", "2026-09-02T08:00", "2026-09-02T08:50", false, "School")];
+  const merged = mergeOwn(mirrored, ownEvents({ classes: [isqs] }, wed));
+  assert.deepEqual(titles(merged), ["ISQS 2377 Lecture"]);
+});
+
+test("mergeOwn keeps a class when the mirrored event is a different hour", () => {
+  const mirrored = [ev("ISQS 2377 Lecture", "2026-09-02T11:00", "2026-09-02T11:50", false, "School")];
+  const merged = mergeOwn(mirrored, ownEvents({ classes: [isqs] }, wed));
+  assert.deepEqual(titles(merged).sort(), ["ISQS 2377", "ISQS 2377 Lecture"]);
+});
+
+// The opponent is what identifies a game across two calendars — the wrapper
+// wording ("Football vs." here, "TTU Football vs" there) never matches.
+test("mergeOwn matches a game on the opponent, not the whole title", () => {
+  const mirrored = [ev("TTU Football vs Houston", "2026-09-18T19:00", "2026-09-18T22:00", false, "Personal")];
+  const own = ownEvents({ fixtures: [
+    { id: "g", t: "Football vs. Houston", d: "2026-09-18", s: 1140, e: 1320 }
+  ] }, new Date(2026, 8, 18));
+  assert.deepEqual(titles(mergeOwn(mirrored, own)), ["TTU Football vs Houston"]);
+});
+
+test("mergeOwn sorts all-day entries ahead of timed ones", () => {
+  const own = ownEvents({ classes: [isqs], fixtures: [
+    { id: "f", t: "Football vs. Sam Houston", d: "2026-09-02", allDay: true }
+  ] }, wed);
+  assert.deepEqual(titles(mergeOwn([], own)), ["Football vs. Sam Houston", "ISQS 2377"]);
 });

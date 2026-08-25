@@ -260,6 +260,25 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
 }
 .tdgrp:first-child{border-top:0;margin-top:0;padding-top:0}
 .tdgrp.late{color:var(--habits)}
+.tdclear{
+  float:right;background:transparent;border:1px solid var(--line2);color:var(--dim);
+  font:400 9px/1 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;
+  padding:4px 7px;cursor:pointer;margin-top:-3px
+}
+/* Appears under the sheet header when one of Grid's own blocks is tapped. A
+   mirrored event has no bar — it belongs to Apple Calendar. */
+.ownbar{
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  border:1px solid var(--line2);padding:8px;margin-top:10px
+}
+.ownbar .ownt{flex:1 1 100%;font-size:11.5px;color:var(--txt)}
+.ownbar button{
+  background:transparent;border:1px solid var(--line2);color:var(--dim);
+  font:400 9px/1 ui-monospace,monospace;letter-spacing:.12em;text-transform:uppercase;
+  padding:7px 9px;cursor:pointer
+}
+.ownbar button.warn{border-color:var(--warn);color:var(--warn)}
+.ev[data-own]{cursor:pointer}
 /* The origin date of a rolled-over item. Without it an overdue row is
    indistinguishable from one you added today. */
 .tdwhen{font-size:10px;color:var(--dimmer);letter-spacing:.1em;margin-left:6px;white-space:nowrap}
@@ -476,6 +495,14 @@ body::before{animation:drift 7s linear infinite}
           <button class="btn" id="syncShow">Show</button>
           <button class="btn" id="syncCopy">Copy</button>
         </div>
+        <!-- The Worker has held a full copy of the state all along and nothing
+             could read it back, so deleting the app lost everything it was
+             backing up. This is the way home. -->
+        <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+          <span class="lbl">Restore</span>
+          <div class="hint" style="margin:7px 0 9px">Replaces this phone's copy with the server's. Use it on a new phone, or after reinstalling.</div>
+          <button class="btn" id="syncPull" style="--c:var(--warn)">Restore from server</button>
+        </div>
       </div>
     </div>
   </section>
@@ -575,7 +602,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v22";
+const APP_VERSION = "v23";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -637,9 +664,32 @@ function classesFor(key){
     if((c.skip || []).includes(key)) continue;    // Labor Day, Thanksgiving, career fair
     // "class" is what calColor matches on, so these take the classes green
     // without the colour rules having to learn about a second kind of event.
-    out.push({ t:c.t, s:c.s, e:c.e, allDay:false, cal:"class" });
+    // `k` is what identifies this same thing if it also exists in Apple
+    // Calendar: the course code for a class, the opponent for a game.
+    out.push({ t:c.t, s:c.s, e:c.e, allDay:false, cal:"class",
+               own:"class:"+c.id, k:c.t.split(" ")[0] });
   }
   return out;
+}
+
+/* "Football vs. Houston" is the same fixture as a calendar entry called
+   "TTU Football vs Houston"; the opponent is the part that identifies it. */
+function fixtureKey(t){
+  const after = String(t).split(/\s(?:vs\.?|@)\s/i)[1];
+  return (after || String(t)).split("\u2014")[0].trim();
+}
+
+/* One rule for both: same day, and where both carry a time, starting within
+   five minutes. The mirror wins, because Apple Calendar is the truth wherever
+   the same thing exists in both. */
+function alreadyMirrored(mirror, ours){
+  const k = String(ours.k || "").toLowerCase();
+  if(!k) return false;
+  return mirror.some(e => {
+    if(!String(e.t || "").toLowerCase().includes(k)) return false;
+    if(ours.allDay || e.allDay) return true;
+    return Math.abs((e.s || 0) - ours.s) <= 5;
+  });
 }
 
 /* Cheer's own dates. cal:"cheer" is what turns them pink, the one colour the
@@ -647,7 +697,8 @@ function classesFor(key){
 function fixturesFor(key){
   return (S.fixtures || [])
     .filter(f => f.d === key)
-    .map(f => ({ t:f.t, s:f.s, e:f.e, allDay:!!f.allDay, cal:"cheer" }));
+    .map(f => ({ t:f.t, s:f.s, e:f.e, allDay:!!f.allDay, cal:"cheer",
+                 own:"fix:"+f.id, k:fixtureKey(f.t) }));
 }
 
 /* Everything that occupies time on a day: the Apple Calendar mirror plus the
@@ -655,13 +706,10 @@ function fixturesFor(key){
    draw twice, so a mirrored event starting within five minutes and carrying
    the course code wins — the mirror is the truth wherever both exist. */
 function dayEvents(key){
-  const mirrored = eventsOn(key);
-  const mine = classesFor(key).filter(c => {
-    const code = c.t.split(" ")[0].toUpperCase();
-    return !mirrored.some(e => !e.allDay && Math.abs((e.s || 0) - c.s) <= 5
-                            && String(e.t || "").toUpperCase().includes(code));
-  });
-  return mirrored.concat(mine, fixturesFor(key))
+  const mirror = eventsOn(key);
+  const mine = classesFor(key).concat(fixturesFor(key))
+    .filter(x => !alreadyMirrored(mirror, x));
+  return mirror.concat(mine)
     .sort((a,b) => (a.allDay?-1:0)-(b.allDay?-1:0) || (a.s||0)-(b.s||0));
 }
 
@@ -961,8 +1009,12 @@ function actionsRow(id, isRepeat){
 function todoGroups(key, compact){
   const list = S.todos[key] || [], late = overdueFor(key), reps = repeatsFor(key);
   const groups = [];
+  // Twenty-three dated items were poured in at once, and every one that goes
+  // unticked lands here and stays. Without a way to sweep them, today's list
+  // silts up and the 8pm push starts reading out September in November.
   if(late.length) groups.push(["Rolled over", " late",
-    late.map(x => todoRow(x, { from:x.from, compact })).join("")]);
+    late.map(x => todoRow(x, { from:x.from, compact })).join(""),
+    compact ? "" : `<button class="tdclear" id="tdClearLate">Tick all ${late.length}</button>`]);
   if(reps.length) groups.push(["Every week", "",
     reps.map(r => todoRow({ id:r.id, t:r.t, done:repeatDone(key,r.id) },
                           { repeatId:r.id, rep:dowSummary(r.dows), compact })).join("")]);
@@ -981,8 +1033,8 @@ function renderTodos(){
   // Headers only earn their space when there's more than one group to tell
   // apart — a lone list under a "This day" caption is just noise.
   const groups = todoGroups(key);
-  const html = groups.map(([name, cls, rows]) =>
-    (groups.length > 1 ? `<div class="tdgrp${cls}">${name}</div>` : "") + rows).join("");
+  const html = groups.map(([name, cls, rows, act]) =>
+    (groups.length > 1 ? `<div class="tdgrp${cls}">${name}${act || ""}</div>` : "") + rows).join("");
   $("#todos").innerHTML = html || `<div class="tdempty">Nothing on this day's list.</div>`;
 
   const open = list.filter(x=>!x.done).length + late.length
@@ -1129,6 +1181,25 @@ document.addEventListener("click", e => {
     renderTodos();
     return;
   }
+  if(e.target.closest("#tdClearLate")){
+    const late = overdueFor(tdDate);
+    for(const x of late){
+      const hit = findTodo(x.id);
+      if(hit) hit.item.done = true;
+    }
+    save(); renderToday(); renderTodos(); renderCal(); renderSheet();
+    toast(late.length === 1 ? "1 item ticked off" : late.length+" items ticked off");
+    return;
+  }
+  if(e.target.closest("[data-ownclose]")){ sheetSel = null; renderSheet(); return; }
+  if(e.target.closest("[data-ownskip]")){ ownSkipDay(sheetDate); return; }
+  if(e.target.closest("[data-owndel]")){ ownDelete(); return; }
+  const own = e.target.closest("[data-own]");
+  if(own){
+    sheetSel = sheetSel === own.dataset.own ? null : own.dataset.own;
+    renderSheet();
+    return;
+  }
   const mdel = e.target.closest("[data-mdel]");
   if(mdel){ delMark(mdel.dataset.mdel); return; }
   if(e.target.closest("#sheetClose")){ closeSheet(); return; }
@@ -1137,6 +1208,50 @@ document.addEventListener("click", e => {
     if(sheetDate === day.dataset.day) closeSheet(); else openSheet(day.dataset.day);
   }
 });
+
+/* ---- editing what Grid put there itself ----
+   A class and a fixture were both poured in from a fixed list, and until now
+   neither could be touched without editing that list and shipping a build. A
+   cancelled lecture and a dropped course are different things, so a class
+   offers both; a fixture only ever goes away. */
+let sheetSel = null;      // "class:<id>" or "fix:<id>", the block being acted on
+
+function ownBar(key){
+  if(!sheetSel) return "";
+  const [kind, id] = sheetSel.split(":");
+  const item = kind === "class"
+    ? (S.classes || []).find(c => c.id === id)
+    : (S.fixtures || []).find(f => f.id === id);
+  if(!item) return "";
+  return `<div class="ownbar">
+    <span class="ownt">${esc(item.t)}</span>
+    ${kind === "class"
+      ? `<button data-ownskip="1">Skip this day</button>
+         <button class="warn" data-owndel="1">Remove for the term</button>`
+      : `<button class="warn" data-owndel="1">Remove</button>`}
+    <button data-ownclose="1">Cancel</button>
+  </div>`;
+}
+
+function ownSkipDay(key){
+  const [kind, id] = (sheetSel || "").split(":");
+  if(kind !== "class") return;
+  const c = (S.classes || []).find(x => x.id === id);
+  if(!c) return;
+  c.skip = (c.skip || []).concat(key);
+  sheetSel = null;
+  save(); renderToday(); renderCal(); renderSheet();
+  toast("Skipped for "+dayLabel(key).toLowerCase());
+}
+
+function ownDelete(){
+  const [kind, id] = (sheetSel || "").split(":");
+  if(kind === "class") S.classes = (S.classes || []).filter(c => c.id !== id);
+  else                 S.fixtures = (S.fixtures || []).filter(f => f.id !== id);
+  sheetSel = null;
+  save(); renderToday(); renderCal(); renderSheet();
+  toast(kind === "class" ? "Class removed" : "Removed");
+}
 
 /* ============ course dates (marks) ============ */
 const marksOn = key => S.marks[key] || [];
@@ -1386,12 +1501,14 @@ const hhmm = m => {
 
 function openSheet(key){
   sheetDate = key;
+  sheetSel = null;
   tdDate = key;              // one date drives both panels
   renderTodos(); renderCal(); renderSheet();
   $("#daySheet").scrollIntoView({ block:"nearest", behavior:"smooth" });
 }
 function closeSheet(){
   sheetDate = null;
+  sheetSel = null;
   $("#daySheet").hidden = true;
   renderCal();
 }
@@ -1440,7 +1557,9 @@ function renderSheet(){
     const top = (e.s - from*60)/60*HOUR_PX;
     const h   = Math.max(15, (e.e - e.s)/60*HOUR_PX - 2);
     const w   = 100/e._of, left = e._col*w;
-    return `<div class="ev" style="--c:var(${calColor(e.cal)});top:${top.toFixed(1)}px;height:${h.toFixed(1)}px;
+    // Only Grid's own entries are tappable. A mirrored event belongs to Apple
+    // Calendar and has to be changed there.
+    return `<div class="ev" ${e.own ? `data-own="${e.own}"` : ""} style="--c:var(${calColor(e.cal)});top:${top.toFixed(1)}px;height:${h.toFixed(1)}px;
       left:calc(${left}% + 2px);width:calc(${w}% - 4px)">
       <b>${esc(e.t)}</b><i>${hhmm(e.s)}</i></div>`;
   }).join("");
@@ -1465,9 +1584,10 @@ function renderSheet(){
       <span class="sdate">${esc(d.toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"}))}</span>
       <button class="sclose" id="sheetClose">Close</button>
     </div>
+    ${ownBar(key)}
     ${marksOn(key).length ? `<div class="ssec">Course</div>` + marksHtml(key, 0, true) : ""}
     ${allDay.length ? `<div class="ssec">All day</div><div class="allday">`
-      + allDay.map(e => `<span style="--c:var(${calColor(e.cal)})">${esc(e.t)}</span>`).join("")
+      + allDay.map(e => `<span ${e.own ? `data-own="${e.own}"` : ""} style="--c:var(${calColor(e.cal)})">${esc(e.t)}</span>`).join("")
       + `</div>` : ""}
     <div class="scols">
       <div>
@@ -1574,6 +1694,7 @@ $("#btnSync").onclick = ()=>{
   }
 };
 $("#syncCancel").onclick = ()=>{ $("#syncPanel").hidden = true; };
+$("#syncPull").onclick = pullState;
 
 // Masked until asked for, so the panel can be opened in front of someone.
 let tokenShown = false;
@@ -1641,6 +1762,49 @@ async function verifySync(token){
     toast("Sync: "+err);
     alert("Grid "+APP_VERSION+"\nsync failed: "+err+"\n\n"+(await connectivityReport())+"\nendpoint: "+SYNC_URL);
   }
+}
+
+/* The other direction, and the one that was missing: the Worker has held a
+   copy of the whole state since sync was built, but nothing ever read it back,
+   so a reinstall lost every to-do while a perfectly good backup sat on the
+   server. Destructive, so it asks first and says how old the copy is. */
+async function pullState(){
+  const token = syncToken();
+  if(!token){ toast("Add a sync token first"); return; }
+  toast("Checking server");
+  let wrapper;
+  try{
+    const res = await fetch(SYNC_URL+"/state", { headers:{ authorization:"Bearer "+token } });
+    if(res.status === 401){ toast("Sync: bad token"); return; }
+    if(!res.ok){ toast("Sync: worker "+res.status); return; }
+    wrapper = await res.json();
+  }catch(e){
+    toast("Sync: "+((e && (e.message || e.name)) || "unreachable"));
+    return;
+  }
+  // The Worker answers 200 with a null state when it has never been written.
+  // Wiping a working phone with that would be the worst possible outcome.
+  const data = wrapper && wrapper.state;
+  if(!data || typeof data !== "object" || Array.isArray(data)){
+    toast("Nothing on the server to restore");
+    return;
+  }
+  const when = wrapper.updatedAt
+    ? new Date(wrapper.updatedAt).toLocaleString()
+    : "an unknown time";
+  const items = Object.values(data.todos || {}).reduce((n, l) => n + (l || []).length, 0);
+  if(!confirm("Restore the copy saved at "+when+"?\n\n"
+            + "It holds "+items+" to-do item"+(items === 1 ? "" : "s")+".\n\n"
+            + "Everything on this phone is replaced. Anything added here since "
+            + "that copy was saved is lost.")) return;
+
+  S = merge(structuredClone(DEFAULT), data);
+  // A copy taken before a batch of built-in dates existed carries no flag for
+  // it, so pour those back rather than restoring a half-empty calendar.
+  seedFall2026();
+  save(); render();
+  $("#syncPanel").hidden = true;
+  toast("Restored from server");
 }
 
 /* Hitting the app's own origin alongside the Worker separates "this phone has
