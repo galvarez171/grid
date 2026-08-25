@@ -109,6 +109,13 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
   font-variant-numeric:tabular-nums;
 }
 .day.pad{color:var(--dimmer);opacity:.3}
+/* A day with classes underlines its number rather than taking a dot. The dots
+   are for episodic things and there are only four colours; classes land on
+   every weekday, so a dot there would drown the exam dates the dots exist to
+   show. An underline reads as "this is a school day" without competing. */
+.day.cls > span:first-child{
+  border-bottom:1.5px solid var(--classes);padding-bottom:1px;line-height:1.1
+}
 .day.today{border-color:var(--work);color:var(--txt);box-shadow:inset 0 0 12px -6px var(--work)}
 .day.open{border-color:var(--txt);color:var(--txt);box-shadow:inset 0 0 12px -7px var(--txt)}
 .dots{display:flex;gap:2px;height:4px}
@@ -398,7 +405,7 @@ body::before{animation:drift 7s linear infinite}
         </div>
       </div>
       <div class="cal" id="cal"></div>
-      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Dots: blue = events, green = course dates, pink = cheer, orange = open to-dos.</div>
+      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Underlined = a class day. Dots: blue = events, green = course dates, pink = cheer, orange = open to-dos.</div>
       <div class="sheet" id="daySheet" hidden></div>
     </div>
   </section>
@@ -568,7 +575,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v21";
+const APP_VERSION = "v22";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -1017,7 +1024,7 @@ function renderCal(){
     const course = marksOn(key).length;
     const cheer  = fixturesFor(key).length;
     if(openTodo) marked++;
-    html += `<div class="day ${key===tk?"today":""}${key===sheetDate?" open":""}" data-day="${key}">
+    html += `<div class="day ${classesFor(key).length?"cls ":""}${key===tk?"today":""}${key===sheetDate?" open":""}" data-day="${key}">
       <span>${d}</span><span class="dots">${
         busy ? `<i class="dot" style="--c:var(--work)"></i>` : ""}${
         course ? `<i class="dot" style="--c:var(--classes)"></i>` : ""}${
