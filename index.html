@@ -135,6 +135,9 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
   box-shadow:0 0 10px var(--work);display:block
 }
 .tcols{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+/* Only when it has something in it — an empty band must not push the columns
+   away from the date rule above. */
+#tMarks .marks{margin-top:12px}
 .tcol{min-width:0}
 .trow{display:flex;align-items:baseline;gap:6px;padding:5px 0}
 .trow + .trow{border-top:1px solid var(--line)}
@@ -186,6 +189,26 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
 .nowline{position:absolute;left:0;right:0;height:1px;background:var(--work);box-shadow:0 0 6px var(--work)}
 .nowline::before{content:"";position:absolute;left:0;top:-2px;width:5px;height:5px;background:var(--work)}
 .sempty{font-size:11px;color:var(--dimmer);padding:2px 0}
+/* Course dates wrap instead of ellipsing like an all-day chip: an exam window
+   carries its chapter list with it, and "Exam #1 (Ch. 1, 3…" cropped at the
+   chip edge is worse than two lines. */
+.marks{display:flex;flex-direction:column;gap:4px}
+.marks .mk{
+  display:flex;gap:7px;align-items:baseline;font-size:11.5px;line-height:1.35;
+  color:var(--txt);border-left:2px solid var(--classes);padding:3px 0 3px 7px
+}
+.marks .mk b{
+  flex:0 0 auto;font-weight:400;font-size:9.5px;letter-spacing:.14em;
+  color:var(--classes);padding-top:1px
+}
+.marks .mdel{
+  margin-left:auto;flex:0 0 auto;background:transparent;border:0;color:var(--dimmer);
+  font:400 15px/1 ui-monospace,monospace;cursor:pointer;
+  /* Big enough to hit on a phone. At 14px of glyph the target was about
+     12px across, which on a thumb is a coin toss between removing a date
+     and opening the day. */
+  min-width:30px;height:26px;margin-top:-4px
+}
 .shabits{display:flex;flex-wrap:wrap;gap:6px}
 .shabits button{
   background:transparent;border:1px solid var(--c,var(--line2));color:var(--c,var(--dim));
@@ -348,6 +371,7 @@ body::before{animation:drift 7s linear infinite}
           <div class="tbar"><i id="tBar"></i></div>
         </div>
       </div>
+      <div id="tMarks"></div>
       <div class="tcols">
         <div class="tcol">
           <div class="ssec">Schedule</div>
@@ -374,7 +398,7 @@ body::before{animation:drift 7s linear infinite}
         </div>
       </div>
       <div class="cal" id="cal"></div>
-      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Dots = days with something on the list.</div>
+      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Dots: blue = events, green = course dates, orange = open to-dos.</div>
       <div class="sheet" id="daySheet" hidden></div>
     </div>
   </section>
@@ -481,7 +505,17 @@ const DEFAULT = {
   // "YYYY-MM-DD" -> [{id,t,done}]. Keyed by day rather than one flat list so a
   // Siri item spoken on Tuesday for Thursday lands on Thursday, and so the
   // calendar can mark which days still have something open.
-  todos: {}
+  todos: {},
+  // A dated fact that isn't a task: an exam window, a work-due date, a day
+  // with no class. Apple Calendar is a read-only mirror here, so a course
+  // date has nowhere else to live — and a to-do is the wrong shape for it,
+  // because "Labor Day, no class" can't be ticked and an unticked item rolls
+  // over onto today forever. A mark is what the day IS; the to-do beside it
+  // (where there is one) is what you have to do about it.
+  marks: {},            // "YYYY-MM-DD" -> [{id,c,t}]
+  // One flag per built-in batch. It's what stops a second pour: delete a
+  // seeded mark or item and it stays deleted.
+  seeded: {}
 };
 const RESET_ITEMS = [
   "Pull next week's shifts from GroupMe → Work calendar",
@@ -523,7 +557,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v18";
+const APP_VERSION = "v19";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -763,6 +797,10 @@ function renderToday(){
   const now = new Date();
   $("#tBar").style.width = ((now.getHours()*60 + now.getMinutes())/1440*100).toFixed(1)+"%";
 
+  // Full width rather than inside the Schedule column: a course date is a
+  // sentence, and that column is barely half a phone wide.
+  $("#tMarks").innerHTML = marksHtml(key, 3);
+
   const nowMin = now.getHours()*60 + now.getMinutes();
   const evs = eventsOn(key);
   $("#tEvents").innerHTML = evs.length
@@ -925,10 +963,12 @@ function renderCal(){
     const openTodo = (S.todos[key] || []).some(x => !x.done)
                   || repeatsFor(key).some(r => !repeatDone(key, r.id));
     const busy = eventsOn(key).length;
+    const course = marksOn(key).length;
     if(openTodo) marked++;
     html += `<div class="day ${key===tk?"today":""}${key===sheetDate?" open":""}" data-day="${key}">
       <span>${d}</span><span class="dots">${
         busy ? `<i class="dot" style="--c:var(--work)"></i>` : ""}${
+        course ? `<i class="dot" style="--c:var(--classes)"></i>` : ""}${
         openTodo ? `<i class="dot" style="--c:var(--habits)"></i>` : ""}</span></div>`;
   }
   $("#cal").innerHTML = html;
@@ -1029,12 +1069,104 @@ document.addEventListener("click", e => {
     renderTodos();
     return;
   }
+  const mdel = e.target.closest("[data-mdel]");
+  if(mdel){ delMark(mdel.dataset.mdel); return; }
   if(e.target.closest("#sheetClose")){ closeSheet(); return; }
   const day = e.target.closest("[data-day]");
   if(day && !day.classList.contains("pad")){
     if(sheetDate === day.dataset.day) closeSheet(); else openSheet(day.dataset.day);
   }
 });
+
+/* ============ course dates (marks) ============ */
+const marksOn = key => S.marks[key] || [];
+
+/* One renderer for both the Today band and the day sheet. `cap` trims the
+   Today box, which has to stay glanceable; the sheet is where you went to
+   read the day, so it shows every one and carries the only way to remove it. */
+function marksHtml(key, cap, del){
+  const ms = marksOn(key);
+  if(!ms.length) return "";
+  const show = cap ? ms.slice(0, cap) : ms;
+  return `<div class="marks">` + show.map(m => `<div class="mk">
+      ${m.c ? `<b>${esc(m.c)}</b>` : ""}<span>${esc(m.t)}</span>
+      ${del ? `<button class="mdel" data-mdel="${m.id}" aria-label="remove course date">&times;</button>` : ""}
+    </div>`).join("")
+    + (ms.length > show.length ? `<div class="tnone">+${ms.length - show.length} more</div>` : "")
+    + `</div>`;
+}
+
+function delMark(id){
+  for(const k of Object.keys(S.marks)){
+    const at = S.marks[k].findIndex(m => m.id === id);
+    if(at < 0) continue;
+    S.marks[k].splice(at, 1);
+    if(!S.marks[k].length) delete S.marks[k];
+    save(); renderToday(); renderCal(); renderSheet();
+    toast("Course date removed");
+    return;
+  }
+}
+
+/* Fall 2026, straight from the four syllabi. The fourth column is the to-do
+   that a graded deadline also earns, so the rollover and the 8pm nag apply to
+   it; 0 means the row is a mark only, because there is nothing to tick about a
+   day with no class. It is worded as an action rather than repeating the mark
+   — the two sit on the same panel, and a verbatim copy reads as a bug.
+   Ids are positional, so this array is append-only: reordering it would change
+   which mark an already-deleted id referred to. */
+const FALL26 = [
+  // ymd            course  what the day is                                          the task, if any
+  ["2026-08-24", "BLAW", "Module 1 begins — Ch. 1, 3",                            0],
+  ["2026-08-25", "ACCT", "Exam dates live on Canvas, not the syllabus",            "Pull the ACCT exam + final dates off Canvas"],
+  ["2026-08-30", "BLAW", "Ch. 1 & 3 Revel work due",                               "Do BLAW Revel — Ch. 1 & 3"],
+  ["2026-09-06", "BLAW", "Ch. 4 & 5 Revel work due",                               "Do BLAW Revel — Ch. 4 & 5"],
+  ["2026-09-07", "",     "Labor Day — no class",                                   0],
+  ["2026-09-13", "BLAW", "Ch. 6 & 7 Revel work due",                               "Do BLAW Revel — Ch. 6 & 7"],
+  ["2026-09-16", "ISQS", "Test 1",                                                 "Sit ISQS Test 1"],
+  ["2026-09-18", "BLAW", "Exam #1 — window Sep 18–20 (Ch. 1, 3, 4, 5, 6, 7)",      "Sit BLAW Exam #1 — window shuts Sep 20"],
+  ["2026-09-22", "SCM",  "Exam #1 — window Sep 22–23, RTC 8am–8pm (Ch. 1–3)",      "Sit SCM Exam #1 at the RTC — window shuts Sep 23"],
+  ["2026-09-27", "BLAW", "Ch. 9 & 10 Revel work due",                              "Do BLAW Revel — Ch. 9 & 10"],
+  ["2026-09-30", "SCM",  "Rawls Career Fair — no class",                           0],
+  ["2026-10-04", "BLAW", "Ch. 11 & 12 Revel work due",                             "Do BLAW Revel — Ch. 11 & 12"],
+  ["2026-10-11", "BLAW", "Ch. 13 Revel work due",                                  "Do BLAW Revel — Ch. 13"],
+  ["2026-10-14", "ISQS", "Test 2",                                                 "Sit ISQS Test 2"],
+  ["2026-10-14", "SCM",  "Guest lecture (H-E-B)",                                  0],
+  ["2026-10-16", "BLAW", "Exam #2 — window Oct 16–18 (Ch. 9, 10, 11, 12, 13)",     "Sit BLAW Exam #2 — window shuts Oct 18"],
+  ["2026-10-20", "SCM",  "Exam #2 — window Oct 20–21, RTC 8am–8pm (Ch. 4–6)",      "Sit SCM Exam #2 at the RTC — window shuts Oct 21"],
+  ["2026-10-25", "BLAW", "Ch. 20 & 21 Revel work due",                             "Do BLAW Revel — Ch. 20 & 21"],
+  ["2026-10-26", "SCM",  "Beer Game day 1 — in class, mandatory",                  0],
+  ["2026-10-28", "SCM",  "Beer Game day 2 — in class, mandatory",                  0],
+  ["2026-10-30", "SCM",  "Beer Game day 3 — in class, mandatory",                  0],
+  ["2026-11-01", "BLAW", "Ch. 23 Revel work due",                                  "Do BLAW Revel — Ch. 23"],
+  ["2026-11-06", "SCM",  "Negotiation introduction",                               0],
+  ["2026-11-08", "BLAW", "Ch. 24 & 25 Revel work due",                             "Do BLAW Revel — Ch. 24 & 25"],
+  ["2026-11-09", "SCM",  "Negotiation exercise — in class, paired",                0],
+  ["2026-11-11", "ISQS", "Test 3",                                                 "Sit ISQS Test 3"],
+  ["2026-11-13", "BLAW", "Exam #3 — window Nov 13–15 (Ch. 35, 37, 20, 21, 23)",    "Sit BLAW Exam #3 — window shuts Nov 15"],
+  ["2026-11-22", "BLAW", "Ch. 29 Revel work due",                                  "Do BLAW Revel — Ch. 29"],
+  ["2026-11-23", "ISQS", "Book critique due; final review in class",               "Turn in the ISQS book critique"],
+  ["2026-11-25", "",     "Thanksgiving — no class Nov 25–27",                      0],
+  ["2026-12-01", "ISQS", "Final exam is a Saturday in December, date TBA",         "Confirm the ISQS final exam date"],
+  ["2026-12-04", "BLAW", "Exam #4 (Ch. 24, 25, 27, 28, 29) — last course day",     "Sit BLAW Exam #4 — the last one, no window"],
+  ["2026-12-08", "SCM",  "Exam #3 — window Dec 8–9, RTC 8am–10pm (Ch. 7–10)",      "Sit SCM Exam #3 at the RTC — window shuts Dec 9"]
+];
+
+function seedFall2026(){
+  if(S.seeded.fall2026) return;
+  FALL26.forEach(([key, c, t, td], i) => {
+    const list = S.marks[key] = S.marks[key] || [];
+    const id = "f26-" + i;
+    if(!list.some(m => m.id === id)) list.push({ id, c, t });
+    if(td) addTodo(key, td, "f26t-" + i);
+  });
+  S.seeded.fall2026 = true;
+  save();
+  // Thirty-three dates and twenty-three items appearing out of nowhere reads
+  // as a glitch unless the app says it did it. After the boot flourish, so it
+  // isn't painted over.
+  setTimeout(()=>toast("Fall 2026 course dates added"), 900);
+}
 
 /* ============ to-do ============ */
 const tdInput = $("#tdInput");
@@ -1180,6 +1312,7 @@ function renderSheet(){
       <span class="sdate">${esc(d.toLocaleDateString(undefined,{weekday:"long",month:"short",day:"numeric"}))}</span>
       <button class="sclose" id="sheetClose">Close</button>
     </div>
+    ${marksOn(key).length ? `<div class="ssec">Course</div>` + marksHtml(key, 0, true) : ""}
     ${allDay.length ? `<div class="ssec">All day</div><div class="allday">`
       + allDay.map(e => `<span style="--c:var(${calColor(e.cal)})">${esc(e.t)}</span>`).join("")
       + `</div>` : ""}
@@ -1415,6 +1548,10 @@ $("#fileIn").onchange = e => {
       const data = JSON.parse(r.result);
       if(!data.habits) throw new Error("not a Grid backup");
       S = merge(structuredClone(DEFAULT), data);
+      // A backup taken before the course dates existed carries no seeded flag,
+      // so pour them back now rather than leaving the app blank until the next
+      // launch happens to reseed it.
+      seedFall2026();
       save(); render(); toast("Backup restored");
     }catch(err){ toast("Bad backup file"); }
   };
@@ -1459,6 +1596,7 @@ if(!sessionStorage.getItem("grid.booted")){
   setTimeout(()=>document.body.classList.remove("boot"), 800);
 }
 
+seedFall2026();
 render();
 pushSync(true);
 drainInbox();
