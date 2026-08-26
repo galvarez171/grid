@@ -602,7 +602,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v23";
+const APP_VERSION = "v24";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -1327,6 +1327,181 @@ const FALL26 = [
   ["2026-12-08", "SCM",  "Exam #3 — window Dec 8–9, RTC 8am–10pm (Ch. 7–10)",      "Sit SCM Exam #3 at the RTC — window shuts Dec 9"]
 ];
 
+/* Rows that landed after the first pour — the Canvas assignment lists, which
+   are the only place the week-by-week work is written down, plus anything else
+   handed over once the term was already running. Ids are written out instead of positional, and each one is
+   remembered in S.seeded.rows the moment it is poured, so this list can keep
+   growing: a phone holding the first ten takes only the eleventh on its next
+   launch, and a row deleted by hand stays deleted even though it still sits in
+   this array.
+
+   A row is a mark, a to-do, or both. Homework is only ever a to-do — a due
+   date is nothing but the thing you have to do about it, and a mark repeating
+   the to-do word for word on the same panel reads as a bug. The exam is both,
+   because the window is a fact about the day beyond sitting it. */
+const FALL26_MORE = [
+  // id          ymd            course  the mark, if any      the to-do, if any
+  ["acct-q01", "2026-08-30", "ACCT", 0, "Do ACCT Ch. 1 quiz"],
+  ["acct-h01", "2026-08-30", "ACCT", 0, "Do ACCT Ch. 1 homework"],
+  ["acct-x01", "2026-08-30", "ACCT", 0, "Do ACCT Ch. 1 Excel project (extra credit)"],
+  ["acct-q02", "2026-09-08", "ACCT", 0, "Do ACCT Ch. 2 quiz"],
+  ["acct-h02", "2026-09-08", "ACCT", 0, "Do ACCT Ch. 2 homework"],
+  ["acct-x02", "2026-09-08", "ACCT", 0, "Do ACCT Ch. 2 Excel project (extra credit)"],
+  ["acct-q03", "2026-09-14", "ACCT", 0, "Do ACCT Ch. 3 quiz"],
+  ["acct-h03", "2026-09-14", "ACCT", 0, "Do ACCT Ch. 3 homework"],
+  ["acct-x03", "2026-09-14", "ACCT", 0, "Do ACCT Ch. 3 Excel project (extra credit)"],
+  ["acct-e01", "2026-09-15", "ACCT",
+     "Exam #1 — window opens Sep 15 8am, shuts Sep 16 8pm (Ch. 1–3)",
+     "Sit ACCT Exam #1 — window shuts Sep 16 at 8pm"],
+  ["acct-ls",  "2026-09-21", "ACCT", 0, "Do the ACCT learning-style quiz"],
+  ["acct-q04", "2026-09-24", "ACCT", 0, "Do ACCT Ch. 4 quiz"],
+  ["acct-h04", "2026-09-24", "ACCT", 0, "Do ACCT Ch. 4 homework"],
+  ["acct-x04", "2026-09-24", "ACCT", 0, "Do ACCT Ch. 4 Excel project (extra credit)"],
+  ["acct-q05", "2026-10-04", "ACCT", 0, "Do ACCT Ch. 5 quiz"],
+  ["acct-h05", "2026-10-04", "ACCT", 0, "Do ACCT Ch. 5 homework"],
+  ["acct-x05", "2026-10-04", "ACCT", 0, "Do ACCT Ch. 5 Excel project (extra credit)"],
+  ["acct-q06", "2026-10-13", "ACCT", 0, "Do ACCT Ch. 6 quiz"],
+  ["acct-h06", "2026-10-13", "ACCT", 0, "Do ACCT Ch. 6 homework"],
+  ["acct-x06", "2026-10-13", "ACCT", 0, "Do ACCT Ch. 6 Excel project (extra credit)"],
+  ["acct-q07", "2026-10-22", "ACCT", 0, "Do ACCT Ch. 7 quiz"],
+  ["acct-h07", "2026-10-22", "ACCT", 0, "Do ACCT Ch. 7 homework"],
+  ["acct-x07", "2026-10-22", "ACCT", 0, "Do ACCT Ch. 7 Excel project (extra credit)"],
+  ["acct-q08", "2026-11-01", "ACCT", 0, "Do ACCT Ch. 8 quiz"],
+  ["acct-h08", "2026-11-01", "ACCT", 0, "Do ACCT Ch. 8 homework"],
+  ["acct-x08", "2026-11-01", "ACCT", 0,
+     "Do the ACCT Ch. 8 contingent-liabilities simulation (extra credit)"],
+  ["acct-q09", "2026-11-15", "ACCT", 0, "Do ACCT Ch. 9 + Appendix F quiz"],
+  ["acct-h09", "2026-11-15", "ACCT", 0, "Do ACCT Ch. 9 + Appendix F homework"],
+  ["acct-x09", "2026-11-15", "ACCT", 0, "Do ACCT Ch. 9 Excel project (extra credit)"],
+  ["acct-q10", "2026-11-19", "ACCT", 0, "Do ACCT Ch. 10 quiz"],
+  ["acct-h10", "2026-11-19", "ACCT", 0, "Do ACCT Ch. 10 homework"],
+  ["acct-x10", "2026-11-19", "ACCT", 0,
+     "Do the ACCT Ch. 10 Tableau dashboard (extra credit)"],
+  ["acct-q11", "2026-12-02", "ACCT", 0, "Do ACCT Ch. 11 quiz"],
+  ["acct-h11", "2026-12-02", "ACCT", 0, "Do ACCT Ch. 11 homework"],
+  ["acct-x11", "2026-12-02", "ACCT", 0, "Do ACCT Ch. 11 Excel project (extra credit)"],
+
+  // BLAW. Canvas splits each week into the Revel chapter work and the
+  // post-quizzes on it, which land a week apart — the syllabus collapsed both
+  // into one "Revel work due" line, and those coarse lines are retired below.
+  ["blaw-r01", "2026-08-30", "BLAW", 0, "Do BLAW Ch. 1 Revel — Sources of Laws"],
+  ["blaw-r03", "2026-08-30", "BLAW", 0, "Do BLAW Ch. 3 Revel — Sole Proprietorships and Partnerships"],
+  ["blaw-r04", "2026-08-30", "BLAW", 0, "Do BLAW Ch. 4 Revel — Corporations: formation and shareholders"],
+  ["blaw-r05", "2026-08-30", "BLAW", 0, "Do BLAW Ch. 5 Revel — Corporations: directors and officers"],
+  ["blaw-p01", "2026-08-30", "BLAW", 0, "Do BLAW Ch. 1 post-quiz"],
+  ["blaw-p03", "2026-08-30", "BLAW", 0, "Do BLAW Ch. 3 post-quiz"],
+  ["blaw-r06", "2026-09-06", "BLAW", 0, "Do BLAW Ch. 6 Revel — LLCs and franchises"],
+  ["blaw-p04", "2026-09-06", "BLAW", 0, "Do BLAW Ch. 4 post-quiz"],
+  ["blaw-p05", "2026-09-06", "BLAW", 0, "Do BLAW Ch. 5 post-quiz"],
+  ["blaw-r07", "2026-09-13", "BLAW", 0, "Do BLAW Ch. 7 Revel — intellectual property"],
+  ["blaw-p06", "2026-09-13", "BLAW", 0, "Do BLAW Ch. 6 post-quiz"],
+  ["blaw-p07", "2026-09-13", "BLAW", 0, "Do BLAW Ch. 7 post-quiz"],
+  ["blaw-e01", "2026-09-18", "BLAW",
+     "Exam #1 — opens 8am, shuts 11:59pm (Ch. 1, 3, 4, 5, 6, 7)",
+     "Sit BLAW Exam #1 — shuts tonight at 11:59pm"],
+  ["blaw-r09", "2026-09-20", "BLAW", 0, "Do BLAW Ch. 9 Revel — contracts: agreement and assent"],
+  ["blaw-r10", "2026-09-20", "BLAW", 0, "Do BLAW Ch. 10 Revel — contracts: consideration and statute of frauds"],
+  ["blaw-r11", "2026-09-27", "BLAW", 0, "Do BLAW Ch. 11 Revel — contracts: capacity and legality"],
+  ["blaw-r12", "2026-09-27", "BLAW", 0, "Do BLAW Ch. 12 Revel — contracts: third-party rights"],
+  ["blaw-p09", "2026-09-27", "BLAW", 0, "Do BLAW Ch. 9 post-quiz"],
+  ["blaw-p10", "2026-09-27", "BLAW", 0, "Do BLAW Ch. 10 post-quiz"],
+  ["blaw-r13", "2026-10-04", "BLAW", 0, "Do BLAW Ch. 13 Revel — contracts: discharge"],
+  ["blaw-p11", "2026-10-04", "BLAW", 0, "Do BLAW Ch. 11 post-quiz"],
+  ["blaw-p12", "2026-10-04", "BLAW", 0, "Do BLAW Ch. 12 post-quiz"],
+  ["blaw-r35", "2026-10-11", "BLAW", 0, "Do BLAW Ch. 35 Revel — real property"],
+  ["blaw-r37", "2026-10-11", "BLAW", 0, "Do BLAW Ch. 37 Revel — personal property"],
+  ["blaw-m13", "2026-10-11", "BLAW", 0, "Do the BLAW Ch. 13 mini-simulation"],
+  ["blaw-e02", "2026-10-16", "BLAW",
+     "Exam #2 — opens 8am, shuts 11:59pm (Ch. 9, 10, 11, 12, 13)",
+     "Sit BLAW Exam #2 — shuts tonight at 11:59pm"],
+  ["blaw-r20", "2026-10-18", "BLAW", 0, "Do BLAW Ch. 20 Revel — agency"],
+  ["blaw-r21", "2026-10-18", "BLAW", 0, "Do BLAW Ch. 21 Revel — employment law and employee rights"],
+  ["blaw-p35", "2026-10-18", "BLAW", 0, "Do BLAW Ch. 35 post-quiz"],
+  ["blaw-p37", "2026-10-18", "BLAW", 0, "Do BLAW Ch. 37 post-quiz"],
+  ["blaw-r23", "2026-10-25", "BLAW", 0, "Do BLAW Ch. 23 Revel — discrimination and diversity"],
+  ["blaw-m21", "2026-10-25", "BLAW", 0, "Do the BLAW Ch. 21 mini-simulation"],
+  ["blaw-p20", "2026-10-25", "BLAW", 0, "Do BLAW Ch. 20 post-quiz"],
+  ["blaw-p21", "2026-10-25", "BLAW", 0, "Do BLAW Ch. 21 post-quiz"],
+  ["blaw-r24", "2026-11-01", "BLAW", 0, "Do BLAW Ch. 24 Revel — litigation"],
+  ["blaw-r25", "2026-11-01", "BLAW", 0, "Do BLAW Ch. 25 Revel — civil liability"],
+  ["blaw-p23", "2026-11-01", "BLAW", 0, "Do BLAW Ch. 23 post-quiz"],
+  ["blaw-r27", "2026-11-08", "BLAW", 0, "Do BLAW Ch. 27 Revel — contracts: performance, breach, remedies"],
+  ["blaw-r28", "2026-11-08", "BLAW", 0, "Do BLAW Ch. 28 Revel — alternative dispute resolution"],
+  ["blaw-p24", "2026-11-08", "BLAW", 0, "Do BLAW Ch. 24 post-quiz"],
+  ["blaw-p25", "2026-11-08", "BLAW", 0, "Do BLAW Ch. 25 post-quiz"],
+  ["blaw-e03", "2026-11-13", "BLAW",
+     "Exam #3 — opens 8am, shuts 11:59pm (Ch. 35, 37, 20, 21, 23)",
+     "Sit BLAW Exam #3 — shuts tonight at 11:59pm"],
+  ["blaw-r29", "2026-11-15", "BLAW", 0, "Do BLAW Ch. 29 Revel — administrative law"],
+  ["blaw-m28", "2026-11-15", "BLAW", 0, "Do the BLAW Ch. 28 mini-simulation"],
+  ["blaw-p27", "2026-11-15", "BLAW", 0, "Do BLAW Ch. 27 post-quiz"],
+  ["blaw-p28", "2026-11-15", "BLAW", 0, "Do BLAW Ch. 28 post-quiz"],
+  ["blaw-p29", "2026-11-22", "BLAW", 0, "Do BLAW Ch. 29 post-quiz"],
+
+  // ISQS. Every week pairs a graded video with the reflection on it, but only
+  // the reflection carries a date on Canvas — the video is what you do to be
+  // able to write it, on the same Friday. The in-class worksheets, R files and
+  // practice problems are undated and stay off the list.
+  ["isqs-r01", "2026-08-28", "ISQS", 0, "Do the ISQS linear decision rule reflection"],
+  ["isqs-r02", "2026-09-04", "ISQS", 0, "Do the ISQS decision tree reflection"],
+  ["isqs-r03", "2026-09-11", "ISQS", 0, "Do the ISQS Rawls interview reflection"],
+  ["isqs-r04", "2026-09-18", "ISQS", 0, "Do the ISQS Bayes reflection"],
+  ["isqs-r05", "2026-09-25", "ISQS", 0, "Do the ISQS relative risk reflection"],
+  ["isqs-r06", "2026-10-02", "ISQS", 0, "Do the ISQS CRAFT reflection"],
+  ["isqs-r07", "2026-10-09", "ISQS", 0, "Do the ISQS how-brains-work reflection"],
+  ["isqs-r08", "2026-10-16", "ISQS", 0, "Do the ISQS attention and memory reflection"],
+  ["isqs-r09", "2026-10-23", "ISQS", 0, "Do the ISQS perceptions reflection"],
+  ["isqs-r10", "2026-10-30", "ISQS", 0, "Do the ISQS heuristics and biases reflection"],
+  ["isqs-r11", "2026-11-06", "ISQS", 0, "Do the ISQS decision-making-with-IT reflection"],
+  ["isqs-e03", "2026-11-11", "ISQS",
+     "Exam #3 — Respondus LockDown Browser required",
+     "Sit ISQS Exam #3 — install Respondus LockDown Browser before you start"],
+  ["isqs-r12", "2026-11-13", "ISQS", 0, "Do the ISQS nudge reflection"],
+  ["isqs-r13", "2026-11-20", "ISQS", 0, "Do the ISQS decisions in groups reflection"],
+
+  // MGT. Four chapter assignments land on one Tuesday, which is worth seeing
+  // as four lines rather than one — 65 points in an evening is a different
+  // night's work from 10. The mentorship badge takes a mark as well as a
+  // to-do: the last day of class is a fact about the day, and the badge is
+  // ten percent of the grade with a letter-grade penalty behind it.
+  ["mgt-c01",  "2026-09-22", "MGT", 0, "Do MGT Ch. 1 reading and assignment"],
+  ["mgt-c02",  "2026-09-22", "MGT", 0, "Do MGT Ch. 2 reading and assignment"],
+  ["mgt-c03",  "2026-09-22", "MGT", 0, "Do MGT Ch. 3 reading and assignment"],
+  ["mgt-c04",  "2026-09-22", "MGT", 0, "Do MGT Ch. 4 reading and assignment"],
+  ["mgt-term", "2026-10-06", "MGT", 0, "Turn in the MGT term report"],
+  ["mgt-res",  "2026-11-17", "MGT", 0, "Turn in the MGT research report"],
+  ["mgt-badge","2026-12-09", "MGT",
+     "Rawls Mentorship badge due on Canvas — last day of class",
+     "Upload the Rawls Mentorship badge to Canvas — missing it costs a letter grade"],
+
+  // SCM. Only the first three chapters are posted — the exams already in
+  // FALL26 run to Ch. 10, so the rest of this is still to come. The quizzes
+  // say "proctoring enabled" on Canvas, which is worth carrying into the
+  // to-do: it is the difference between doing one on a phone and not.
+  ["scm-a01", "2026-09-04", "SCM", 0, "Do SCM activity-based assignment 1"],
+  ["scm-q01", "2026-09-04", "SCM", 0, "Do the SCM Ch. 1 quiz — proctored"],
+  ["scm-a02", "2026-09-11", "SCM", 0, "Do SCM activity-based assignment 2"],
+  ["scm-q02", "2026-09-11", "SCM", 0, "Do the SCM Ch. 2 quiz — proctored"],
+  ["scm-a03", "2026-09-18", "SCM", 0, "Do SCM activity-based assignment 3"],
+  ["scm-q03", "2026-09-18", "SCM", 0, "Do the SCM Ch. 3 quiz — proctored"]
+];
+
+/* Rows from the first pour that the Canvas lists have overtaken. The BLAW
+   syllabus gave one "Revel work due" line a week; Canvas names the six
+   separate things that line stood for, and carrying both on the same day is
+   noise. The three exam marks go too: the syllabus called them multi-day
+   windows, Canvas has each one opening 8am and shutting 11:59pm the same day,
+   and a calendar saying the window shuts two days after it really does is
+   worse than no calendar. Positional ids, so this list reads against FALL26 by
+   index; the array itself must not be reordered. Cleared once, behind a flag,
+   so anything put back by hand stays back. */
+const RETIRED = [
+  "f26-2",  "f26-3",  "f26-5",  "f26-9",  "f26-11",  // BLAW Revel summary lines
+  "f26-12", "f26-17", "f26-21", "f26-23", "f26-27",
+  "f26-7",  "f26-15", "f26-26",                      // BLAW exams 1-3, wrong window
+  "f26-25"                                           // ISQS Test 3, no LockDown note
+];
+
 /* The weekly grid, read off the registrar's schedule. SCM at 9:00 is what
    pins the section to 001; the syllabus lists three with different times.
    Class blocks deliberately take no dot on the month grid — something on
@@ -1429,8 +1604,50 @@ function seedFall2026(){
     did.push("cheer dates");
   }
 
-  if(!did.length) return;
+  // Retirements run after the first-pour block above and before the rows that
+  // replace them, so a fresh phone takes the syllabus batch, drops the parts
+  // Canvas supersedes, and lands in the same state as a phone that has been
+  // carrying them since August.
+  S.seeded.gone = S.seeded.gone || {};
+  let removed = 0;
+  for(const id of RETIRED){
+    if(S.seeded.gone[id]) continue;
+    const tid = id.replace("f26-", "f26t-");
+    for(const [store, wanted] of [[S.marks, id], [S.todos, tid]]){
+      for(const k of Object.keys(store)){
+        const at = store[k].findIndex(x => x.id === wanted);
+        if(at < 0) continue;
+        store[k].splice(at, 1);
+        if(!store[k].length) delete store[k];
+      }
+    }
+    S.seeded.gone[id] = true;
+    removed++;
+  }
+
+  // Rows that landed after the first pour, remembered one id at a time so the
+  // list can keep growing. They fold into the "course dates" line when the
+  // main batch poured in the same run — on a fresh phone they arrive together.
+  S.seeded.rows = S.seeded.rows || {};
+  let extra = 0;
+  for(const [id, key, c, t, td] of FALL26_MORE){
+    if(S.seeded.rows[id]) continue;
+    if(t){
+      const list = S.marks[key] = S.marks[key] || [];
+      if(!list.some(m => m.id === id)) list.push({ id, c, t });
+    }
+    if(td) addTodo(key, td, id + "-t");
+    S.seeded.rows[id] = true;
+    extra++;
+  }
+  if(extra && !did.includes("course dates"))
+    did.push(extra === 1 ? "1 new date" : extra + " new dates");
+
+  if(!did.length && !removed) return;
   save();
+  // A retirement on its own says nothing: the row it took away is the one the
+  // new rows replace, and "3 lines removed" is not news. Only additions talk.
+  if(!did.length) return;
   // Dates and blocks appearing out of nowhere read as a glitch unless the app
   // says it did it. After the boot flourish, so it isn't painted over.
   setTimeout(()=>toast("Fall 2026 " + did.join(" and ") + " added"), 900);
