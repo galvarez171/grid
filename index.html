@@ -1510,16 +1510,25 @@ const RETIRED = [
    pins the section to 001; the syllabus lists three with different times.
    Class blocks deliberately take no dot on the month grid — something on
    every weekday would paint the month green and drown out the exam dates,
-   which are what the dots are for. */
+   which are what the dots are for.
+
+   MGT 3370 is not here: the section moved online, so it has no Tuesday and
+   Thursday 5:00 block to sit in. The MGT due dates stay — the work is still
+   the work, it just has no room. */
 const TERM = { from: "2026-08-24", to: "2026-12-09" };
 const NO_CLASS = ["2026-09-07", "2026-11-25", "2026-11-26", "2026-11-27"];
 const CLASSES26 = [
   { id:"c26-isqs", t:"ISQS 2377", dows:[1,3,5], s:8*60,  e:8*60+50  },
   { id:"c26-scm",  t:"SCM 3353",  dows:[1,3,5], s:9*60,  e:9*60+50,
     skip:["2026-09-30"] },                       // Rawls Career Fair, SCM only
-  { id:"c26-acct", t:"ACCT 2300", dows:[1,3,5], s:10*60, e:10*60+50 },
-  { id:"c26-mgt",  t:"MGT 3370",  dows:[2,4],   s:17*60, e:18*60+30 }
+  { id:"c26-acct", t:"ACCT 2300", dows:[1,3,5], s:10*60, e:10*60+50 }
 ];
+
+/* Class blocks a phone already took that no longer meet. Dropping the row from
+   CLASSES26 above only spares a fresh install; a phone that seeded in August
+   is still carrying the block and needs it lifted out. Flagged once, like the
+   retired marks, so a block put back by hand stays back. */
+const RETIRED_CLASSES = ["c26-mgt"];   // MGT 3370 went online
 
 /* The cheer calendar, and only the four kinds asked for: football games, home
    men's basketball, field practices, and the report-back dates. The 6am cheer
@@ -1627,6 +1636,16 @@ function seedFall2026(){
     }
     S.seeded.gone[id] = true;
     removed++;
+  }
+
+  // Same one-time lift for class blocks that stopped meeting. Shares the gone
+  // map — the ids don't collide — so a block lifted here stays lifted even if
+  // the row is later re-added by hand.
+  for(const id of RETIRED_CLASSES){
+    if(S.seeded.gone[id]) continue;
+    const at = (S.classes || []).findIndex(c => c.id === id);
+    if(at >= 0){ S.classes.splice(at, 1); removed++; }
+    S.seeded.gone[id] = true;
   }
 
   // Rows that landed after the first pour, remembered one id at a time so the
