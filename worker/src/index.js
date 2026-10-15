@@ -11,6 +11,7 @@
 
 import { buildPushPayload } from "@block65/webcrypto-web-push";
 import { localParts, decideNotifications } from "./triggers.mjs";
+import { mergeDock } from "./dock.mjs";
 
 const KV_KEY = "state";
 const SUB_KEY = "subscription";
@@ -25,6 +26,10 @@ const MAX_INBOX = 200;
 // here on every refresh. Read-only as far as Apple Calendar is concerned.
 const EVENTS_KEY = "events";
 const MAX_EVENTS = 1000;
+// Dock Media's consults, delivery dates and tracker stats, pushed from the PC
+// by the business's scheduled tasks. Its own key so neither the widget's
+// /events write nor the phone's /state write can clobber it.
+const DOCK_KEY = "dock";
 const MAX_BODY = 200 * 1024; // KV allows 25MB; Grid's blob is a few KB. Anything
                              // bigger than this is a bug, not a real state.
 
@@ -41,7 +46,11 @@ export default {
       return json({ ok: true }, 200, origin);
     }
 
-    if (!(await authorized(req, env))) {
+    // The PC holds a second token that can do exactly one thing: replace the
+    // Dock Media feed. A leak of that file can't read or wipe Grid's state.
+    const role = await authRole(req, env);
+    const dockWrite = url.pathname === "/dock" && req.method === "PUT";
+    if (!role || (role === "dock" && !dockWrite)) {
       return json({ error: "unauthorized" }, 401, origin);
     }
 
@@ -141,6 +150,33 @@ export default {
     if (url.pathname === "/events" && req.method === "GET") {
       const raw = await env.GRID_KV.get(EVENTS_KEY);
       if (!raw) return json({ v: 1, syncedAt: null, events: [] }, 200, origin);
+      return new Response(raw, { status: 200, headers: { ...cors(origin), "content-type": "application/json" } });
+    }
+
+    /* ---------- Dock Media feed ---------- */
+
+    if (dockWrite) {
+      const body = await req.text();
+      if (body.length > MAX_BODY) return json({ error: "payload too large" }, 413, origin);
+      let payload;
+      try {
+        payload = JSON.parse(body);
+      } catch {
+        return json({ error: "invalid json" }, 400, origin);
+      }
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        return json({ error: "invalid feed" }, 400, origin);
+      }
+      const raw = await env.GRID_KV.get(DOCK_KEY);
+      const doc = mergeDock(payload, raw ? JSON.parse(raw) : null, new Date().toISOString());
+      await env.GRID_KV.put(DOCK_KEY, JSON.stringify(doc));
+      return json({ ok: true, updatedAt: doc.updatedAt, consults: doc.consults.length, dates: doc.dates.length,
+                    stats: !!doc.stats, money: !!doc.money }, 200, origin);
+    }
+
+    if (url.pathname === "/dock" && req.method === "GET") {
+      const raw = await env.GRID_KV.get(DOCK_KEY);
+      if (!raw) return json({ v: 1, updatedAt: null, stats: null, money: null, consults: [], dates: [] }, 200, origin);
       return new Response(raw, { status: 200, headers: { ...cors(origin), "content-type": "application/json" } });
     }
 
@@ -338,12 +374,18 @@ function applyToggle(state, id, day) {
 
 /* ---------- auth ---------- */
 
-async function authorized(req, env) {
+// "grid" for the phone's token, "dock" for the PC's feed-only token, null for
+// anything else. Both comparisons always run so timing says nothing about which
+// one a guess was close to.
+async function authRole(req, env) {
   const h = req.headers.get("authorization") || "";
   const m = /^Bearer (.+)$/.exec(h);
-  if (!m) return false;
-  if (!env.GRID_TOKEN) return false;
-  return secretEquals(m[1], env.GRID_TOKEN);
+  if (!m) return null;
+  const [grid, dock] = await Promise.all([
+    env.GRID_TOKEN ? secretEquals(m[1], env.GRID_TOKEN) : false,
+    env.DOCK_TOKEN ? secretEquals(m[1], env.DOCK_TOKEN) : false
+  ]);
+  return grid ? "grid" : dock ? "dock" : null;
 }
 
 // SHA-256 first so both operands are always 32 bytes — otherwise

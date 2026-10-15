@@ -18,14 +18,16 @@
      2.4:1 against #05070A, invisible on a phone in daylight. Nothing here is
      below 7:1 any more. */
   --txt:#F2F8FD; --dim:#C3D2E0; --dimmer:#A2B4C6;
-  /* One colour per meaning, and only these four:
+  /* One colour per meaning, and only these five:
        blue   — the calendar: dates, hours, events, anything scheduled
        orange — the to-do list, wherever it appears
        green  — classes
        pink   — cheer
+       purple — Dock Media: consults, delivery dates, the business panel
      Personal and unrecognised calendars fall to blue, because they are still
      scheduled things. Red is not a category, only the destructive action. */
   --work:#00B4FF; --cheer:#FF2D95; --classes:#22E39A; --habits:#FF8A1E;
+  --dock:#B98CFF;
   --warn:#FF4D4D;
   --pad:14px;
 }
@@ -202,12 +204,13 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
 .marks{display:flex;flex-direction:column;gap:4px}
 .marks .mk{
   display:flex;gap:7px;align-items:baseline;font-size:11.5px;line-height:1.35;
-  color:var(--txt);border-left:2px solid var(--classes);padding:3px 0 3px 7px
+  color:var(--txt);border-left:2px solid var(--mc,var(--classes));padding:3px 0 3px 7px
 }
 .marks .mk b{
   flex:0 0 auto;font-weight:400;font-size:9.5px;letter-spacing:.14em;
-  color:var(--classes);padding-top:1px
+  color:var(--mc,var(--classes));padding-top:1px
 }
+.marks.dockm{--mc:var(--dock)}
 .marks .mdel{
   margin-left:auto;flex:0 0 auto;background:transparent;border:0;color:var(--dimmer);
   font:400 15px/1 ui-monospace,monospace;cursor:pointer;
@@ -224,6 +227,15 @@ header .sub{font-size:10px;color:var(--dimmer);text-align:right;letter-spacing:.
 }
 .shabits button[aria-pressed="true"]{opacity:1;box-shadow:0 0 12px -5px var(--c)}
 .shabits button[disabled]{opacity:.2;pointer-events:none}
+
+/* ---------- dock media ---------- */
+.dstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px 8px}
+.dstat b{
+  display:block;font-size:22px;line-height:1.1;font-weight:600;color:var(--dock);
+  font-variant-numeric:tabular-nums;text-shadow:0 0 18px color-mix(in srgb,var(--dock) 35%,transparent)
+}
+.dstat span{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.dstat.hot b{color:var(--txt)}
 
 /* ---------- checklist ---------- */
 .chk{display:flex;align-items:flex-start;gap:10px;padding:9px 0;cursor:pointer}
@@ -424,9 +436,16 @@ body::before{animation:drift 7s linear infinite}
         </div>
       </div>
       <div class="cal" id="cal"></div>
-      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Underlined = a class day. Dots: blue = events, green = course dates, pink = cheer, orange = open to-dos.</div>
+      <div class="hint" style="margin-top:10px" id="calHint">Tap any day for its hour-by-hour schedule. Underlined = a class day. Dots: blue = events, green = course dates, pink = cheer, purple = Dock Media, orange = open to-dos.</div>
       <div class="sheet" id="daySheet" hidden></div>
     </div>
+  </section>
+
+  <!-- DOCK MEDIA — hidden until the PC has pushed something -->
+  <section class="panel" id="dockPanel" style="--c:var(--dock)" hidden>
+    <div class="phead"><i class="tick" style="--c:var(--dock)"></i><h2>Dock Media</h2>
+      <span class="lbl" id="dockAsOf" style="margin-left:auto"></span></div>
+    <div class="pbody" id="dock"></div>
   </section>
 
   <!-- SUNDAY RESET -->
@@ -602,7 +621,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v24";
+const APP_VERSION = "v25";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -620,7 +639,7 @@ function pushSync(immediate){
 }
 document.addEventListener("visibilitychange", ()=>{
   if(document.visibilityState === "hidden") pushSync(true);
-  else { drainInbox(); pullEvents(); }
+  else { drainInbox(); pullEvents(); pullDock(); }
 });
 
 /* ---- Apple Calendar mirror ----
@@ -651,6 +670,49 @@ async function pullEvents(){
 const eventsOn = key => EV.events
   .filter(e => e.d === key)
   .sort((a,b) => (a.allDay?-1:0)-(b.allDay?-1:0) || (a.s||0)-(b.s||0));
+
+/* ---- Dock Media feed ----
+   The business's scheduled tasks run on the PC, which is where Calendly,
+   Square and the tracker are reachable. After each run they push what Grid
+   needs to the Worker; this caches it like the calendar mirror, so the panel
+   and the consult blocks still draw offline. Read-only here too. */
+const DOCK_LS = "grid.dock";
+let DOCK = { updatedAt:null, stats:null, money:null, consults:[], dates:[] };
+try{ DOCK = JSON.parse(localStorage.getItem(DOCK_LS)) || DOCK; }catch(e){}
+
+async function pullDock(){
+  const token = syncToken();
+  if(!token) return;
+  try{
+    const res = await fetch(SYNC_URL+"/dock", { headers:{ authorization:"Bearer "+token } });
+    if(!res.ok) return;
+    const data = await res.json();
+    if(!data || !data.updatedAt) return;          // never pushed yet: keep what we have
+    DOCK = data;
+    try{ localStorage.setItem(DOCK_LS, JSON.stringify(DOCK)); }catch(e){}
+    renderToday(); renderCal(); renderDock(); if(sheetDate) renderSheet();
+  }catch(e){}
+}
+
+/* A booked consult. "Consult: All Stars Unlimited" — the business is what
+   identifies it if Calendly also wrote it into Apple Calendar. */
+function dockConsultsFor(key){
+  return (DOCK.consults || [])
+    .filter(c => c.d === key)
+    .map(c => ({ t:c.t, s:c.s, e:c.e, allDay:false, cal:"dock",
+                 k:String(c.t).replace(/^consult:\s*/i, "").toLowerCase() }));
+}
+const dockDatesOn = key => (DOCK.dates || []).filter(x => x.d === key);
+
+/* Calendly may also be writing bookings into Apple Calendar, under a title
+   like "15 Minute Consult between Gabriel Alvarez and Metha S" that never
+   names the business. Same start (within five minutes) plus a title that
+   reads like a consult, or that names the business, is the same call. */
+function sameConsult(e, c){
+  if(e.allDay || Math.abs((e.s || 0) - c.s) > 5) return false;
+  const t = String(e.t || "").toLowerCase();
+  return /consult|calendly|dock media/.test(t) || (c.k && t.includes(c.k));
+}
 
 /* Which classes meet on a given day. Minutes from local midnight, to match
    the shape the widget flattens Apple Calendar into — so a class block and a
@@ -706,9 +768,13 @@ function fixturesFor(key){
    draw twice, so a mirrored event starting within five minutes and carrying
    the course code wins — the mirror is the truth wherever both exist. */
 function dayEvents(key){
-  const mirror = eventsOn(key);
+  // A consult that is also in the mirror keeps the mirror's copy, as everywhere
+  // else, but takes Dock Media's colour so it reads as business, not personal.
+  const consults = dockConsultsFor(key);
+  const mirror = eventsOn(key).map(e => consults.some(c => sameConsult(e, c)) ? { ...e, cal:"dock" } : e);
   const mine = classesFor(key).concat(fixturesFor(key))
-    .filter(x => !alreadyMirrored(mirror, x));
+    .filter(x => !alreadyMirrored(mirror, x))
+    .concat(consults.filter(c => !mirror.some(e => sameConsult(e, c))));
   return mirror.concat(mine)
     .sort((a,b) => (a.allDay?-1:0)-(b.allDay?-1:0) || (a.s||0)-(b.s||0));
 }
@@ -869,7 +935,7 @@ const MON = ["January","February","March","April","May","June","July","August","
 const $ = s => document.querySelector(s);
 let calMonth = today().getMonth(), calYear = today().getFullYear();
 
-function render(){ renderHeader(); renderToday(); renderTodos(); renderCal(); renderSheet(); renderReset(); }
+function render(){ renderHeader(); renderToday(); renderTodos(); renderCal(); renderSheet(); renderDock(); renderReset(); }
 
 // The date moved into the Today box, which says it far more loudly. All the
 // header still owes is which build a phone is actually running.
@@ -905,7 +971,7 @@ function renderToday(){
 
   // Full width rather than inside the Schedule column: a course date is a
   // sentence, and that column is barely half a phone wide.
-  $("#tMarks").innerHTML = marksHtml(key, 3);
+  $("#tMarks").innerHTML = marksHtml(key, 3) + dockDatesHtml(key);
 
   const nowMin = now.getHours()*60 + now.getMinutes();
   const evs = dayEvents(key);
@@ -1072,15 +1138,18 @@ function renderCal(){
     const key = ymd(new Date(calYear, calMonth, d));
     const openTodo = (S.todos[key] || []).some(x => !x.done)
                   || repeatsFor(key).some(r => !repeatDone(key, r.id));
-    const busy = eventsOn(key).length;
+    const consults = dockConsultsFor(key);
+    const busy = eventsOn(key).filter(e => !consults.some(c => sameConsult(e, c))).length;
     const course = marksOn(key).length;
     const cheer  = fixturesFor(key).length;
+    const dock   = consults.length + dockDatesOn(key).length;
     if(openTodo) marked++;
     html += `<div class="day ${classesFor(key).length?"cls ":""}${key===tk?"today":""}${key===sheetDate?" open":""}" data-day="${key}">
       <span>${d}</span><span class="dots">${
         busy ? `<i class="dot" style="--c:var(--work)"></i>` : ""}${
         course ? `<i class="dot" style="--c:var(--classes)"></i>` : ""}${
         cheer ? `<i class="dot" style="--c:var(--cheer)"></i>` : ""}${
+        dock ? `<i class="dot" style="--c:var(--dock)"></i>` : ""}${
         openTodo ? `<i class="dot" style="--c:var(--habits)"></i>` : ""}</span></div>`;
   }
   $("#cal").innerHTML = html;
@@ -1269,6 +1338,64 @@ function marksHtml(key, cap, del){
     </div>`).join("")
     + (ms.length > show.length ? `<div class="tnone">+${ms.length - show.length} more</div>` : "")
     + `</div>`;
+}
+
+/* Delivery and batch dates. They come from the PC and go away there, so
+   unlike a course date there is no × here. */
+function dockDatesHtml(key){
+  const ds = dockDatesOn(key);
+  if(!ds.length) return "";
+  return `<div class="marks dockm">` + ds.map(x => `<div class="mk"><b>DM</b><span>${esc(x.t)}</span></div>`).join("") + `</div>`;
+}
+
+/* ============ dock media panel ============
+   The business at a glance, from the same snapshot the Dock Media Dashboard
+   on the PC draws: the tracker's funnel, Square's last seven days, and what
+   is booked or due next. Numbers only — the PC owns every one of them. */
+function renderDock(){
+  const panel = $("#dockPanel");
+  if(!DOCK.updatedAt){ panel.hidden = true; return; }
+  panel.hidden = false;
+  const st = DOCK.stats, p = (st && st.pipeline) || {}, q = (st && st.queue) || {}, m = DOCK.money;
+  const n = v => v == null ? "–" : String(v);
+  const stat = (v, label, hot) => `<div class="dstat${hot ? " hot" : ""}"><b>${esc(v)}</b><span>${esc(label)}</span></div>`;
+
+  // "Updated 2:15pm", or the day when it's older: a stale feed has to look stale.
+  const at = new Date(DOCK.updatedAt);
+  const age = (Date.now() - at) / 36e5;
+  $("#dockAsOf").textContent = age > 26 ? "stale · " + at.toLocaleDateString(undefined,{month:"short",day:"numeric"})
+    : "updated " + hhmm(at.getHours()*60 + at.getMinutes());
+  $("#dockAsOf").style.color = age > 26 ? "var(--warn)" : "";
+
+  const money = m && m.total7d != null ? "$" + Math.round(m.total7d).toLocaleString() : "–";
+  let html = `<div class="dstats">
+      ${stat(n(p.total), "Gyms")}${stat(n(p.contacted), "Contacted")}${stat(n(p.responded), "Replied")}${stat(n(p.client), "Clients")}
+      ${stat(n(p.overdue), "Overdue", p.overdue > 0)}${stat(n(q.warm), "Warm")}${stat(money, "Rev 7d")}${stat(n(m && m.count7d), "Sales 7d")}
+    </div>`;
+
+  // Consults and due dates over the next fortnight, soonest first.
+  const t0 = ymd(today()), t14 = ymd(addDays(today(), 14));
+  const nowMin = new Date().getHours()*60 + new Date().getMinutes();
+  const ahead = (DOCK.consults || [])
+    .filter(c => c.d > t0 || (c.d === t0 && c.e > nowMin))
+    .map(c => ({ d:c.d, s:c.s, t:c.t, when: dayLabel(c.d) + " " + hhmm(c.s) }))
+    .concat((DOCK.dates || []).filter(x => x.d >= t0).map(x => ({ d:x.d, s:-1, t:x.t, when: dayLabel(x.d) })))
+    .filter(x => x.d <= t14)
+    .sort((a,b) => a.d < b.d ? -1 : a.d > b.d ? 1 : a.s - b.s);
+  html += `<div class="ssec">Coming up</div>` + (ahead.length
+    ? ahead.slice(0,6).map(x => `<div class="trow"><i class="tdotc" style="--c:var(--dock)"></i>
+        <span class="tt">${esc(x.t)}</span><span class="th">${esc(x.when)}</span></div>`).join("")
+    : `<div class="tnone">No consults or deliveries in the next two weeks.</div>`);
+
+  const warm = (st && st.warmLeads) || [];
+  if(warm.length) html += `<div class="ssec">Warm leads</div>` + warm.slice(0,3).map(w =>
+    `<div class="trow"><i class="tdotc" style="--c:var(--dock)"></i><span class="tt">${esc(w.gym)}</span>
+      <span class="th">${w.idle != null ? esc(w.idle + "d idle") : ""}</span></div>`).join("");
+
+  html += `<div class="hint" style="margin-top:10px">${st
+      ? "Funnel from " + esc(st.tracker || "the tracker") + ". "
+      : "Tracker stats not pushed yet. "}Sent by the Dock Media tasks on the PC after each run.</div>`;
+  $("#dock").innerHTML = html;
 }
 
 function delMark(id){
@@ -1726,6 +1853,7 @@ const HOUR_PX = 34;
 const CIRCUITS = [
   [/work|shift|job/i, "--work"],
   [/cheer/i, "--cheer"],
+  [/dock/i, "--dock"],
   [/class|school|course|lecture/i, "--classes"]
 ];
 function calColor(name){
@@ -1826,6 +1954,7 @@ function renderSheet(){
     </div>
     ${ownBar(key)}
     ${marksOn(key).length ? `<div class="ssec">Course</div>` + marksHtml(key, 0, true) : ""}
+    ${dockDatesOn(key).length ? `<div class="ssec">Dock Media</div>` + dockDatesHtml(key) : ""}
     ${allDay.length ? `<div class="ssec">All day</div><div class="allday">`
       + allDay.map(e => `<span ${e.own ? `data-own="${e.own}"` : ""} style="--c:var(${calColor(e.cal)})">${esc(e.t)}</span>`).join("")
       + `</div>` : ""}
@@ -2158,6 +2287,7 @@ render();
 pushSync(true);
 drainInbox();
 pullEvents();
+pullDock();
 // localhost counts as a secure context too, so allow it — otherwise the
 // offline shell can never be exercised outside of production.
 if("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost","127.0.0.1"].includes(location.hostname))){

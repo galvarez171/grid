@@ -26,10 +26,12 @@ const MAX_EVENT_ROWS = { medium: 3, large: 7 };
 const MAX_TODO_ROWS = { medium: 3, large: 6 };
 
 // One colour per meaning, matching the app exactly: blue is the calendar,
-// orange is the to-do list, green is classes, pink is cheer. Personal and
-// unrecognised calendars fall to blue — they are still scheduled things.
+// orange is the to-do list, green is classes, pink is cheer, purple is Dock
+// Media. Personal and unrecognised calendars fall to blue — they are still
+// scheduled things.
 const CIRCUITS = [
   [/cheer/i, "#FF2D95"],
+  [/dock/i, "#B98CFF"],
   [/class|school|course|lecture/i, "#22E39A"]
 ];
 const CAL = "#00B4FF";        // every other calendar, including Work
@@ -81,8 +83,8 @@ const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.get
 const minutes = d => d.getHours() * 60 + d.getMinutes();
 
 // Deliberately ignores the calendar's own iOS colour: the point is that Grid
-// only ever shows these four, so a calendar tinted purple in Settings still
-// reads as blue here rather than introducing a fifth meaning.
+// only ever shows its own five, so a calendar tinted purple in Settings still
+// reads as blue here rather than borrowing Dock Media's meaning.
 function eventColor(ev) {
   const name = (ev.calendar && ev.calendar.title) || "";
   for (const [re, hex] of CIRCUITS) if (re.test(name)) return hex;
@@ -184,6 +186,36 @@ function mergeOwn(events, own) {
     (a.isAllDay ? 0 : 1) - (b.isAllDay ? 0 : 1) || a.startDate - b.startDate);
 }
 
+/* Dock Media consults, pushed to the Worker by the business's tasks on the PC.
+   Same shape trick as ownEvents. If Calendly also wrote the booking into Apple
+   Calendar, that copy stays (the mirror is the truth) but is redrawn purple; the
+   rule — same start within five minutes, and a title that reads like a consult
+   or names the business — is the app's sameConsult. */
+function dockEvents(dock, day) {
+  const key = ymd(day);
+  return ((dock && dock.consults) || []).filter(c => c.d === key).map(c => ({
+    title: c.t,
+    isAllDay: false,
+    startDate: new Date(day.getTime() + c.s * 60000),
+    endDate: new Date(day.getTime() + c.e * 60000),
+    calendar: { title: "Dock Media" }
+  }));
+}
+
+function mergeConsults(events, consults) {
+  const same = (e, c) => {
+    if (e.isAllDay || Math.abs(e.startDate - c.startDate) > 5 * 60000) return false;
+    const t = String(e.title || "").toLowerCase();
+    const k = String(c.title).replace(/^consult:\s*/i, "").toLowerCase();
+    return /consult|calendly|dock media/.test(t) || (k && t.includes(k));
+  };
+  const out = events.map(e => consults.some(c => same(e, c))
+    ? { title: e.title, isAllDay: false, startDate: e.startDate, endDate: e.endDate, calendar: { title: "Dock Media" } }
+    : e);
+  return out.concat(consults.filter(c => !events.some(e => same(e, c))))
+    .sort((a, b) => (a.isAllDay ? 0 : 1) - (b.isAllDay ? 0 : 1) || a.startDate - b.startDate);
+}
+
 /* ---------- to-dos ---------- */
 
 // Mirrors the app's own rules: an unfinished item rolls forward until it's
@@ -212,6 +244,10 @@ function openTodosFor(state, key) {
 async function loadState(token) {
   const res = await api("/state", token).loadJSON();
   return (res && res.state) || null;
+}
+
+async function loadDock(token) {
+  return await api("/dock", token).loadJSON();
 }
 
 /* ---------- the tap ---------- */
@@ -380,6 +416,10 @@ if (!config.runsInWidget && args.queryParameters && args.queryParameters.toggle)
     } catch (e) {
       note = "OFFLINE";
     }
+    // Its own try: the business feed being down must not cost the to-do list.
+    try {
+      events = mergeConsults(events, dockEvents(await loadDock(token), from));
+    } catch (e) {}
     // Best effort, and last: a failed mirror must not cost the user the widget.
     try {
       await pushMirror(token);

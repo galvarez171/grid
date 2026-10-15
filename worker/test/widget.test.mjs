@@ -39,9 +39,10 @@ const pad = n => String(n).padStart(2, "0");
 const ymd = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const minutes = d => d.getHours() * 60 + d.getMinutes();
 `;
-const { flatten, openTodosFor, ownEvents, mergeOwn } = new Function(
+const { flatten, openTodosFor, ownEvents, mergeOwn, dockEvents, mergeConsults } = new Function(
   helpers + lift("flatten") + lift("openTodosFor") + lift("ownEvents") + lift("mergeOwn")
-  + "return { flatten, openTodosFor, ownEvents, mergeOwn };"
+  + lift("dockEvents") + lift("mergeConsults")
+  + "return { flatten, openTodosFor, ownEvents, mergeOwn, dockEvents, mergeConsults };"
 )();
 
 const ev = (title, s, e, allDay, cal) => ({
@@ -228,4 +229,34 @@ test("mergeOwn sorts all-day entries ahead of timed ones", () => {
     { id: "f", t: "Football vs. Sam Houston", d: "2026-09-02", allDay: true }
   ] }, wed);
   assert.deepEqual(titles(mergeOwn([], own)), ["Football vs. Sam Houston", "ISQS 2377"]);
+});
+
+/* ---------- Dock Media consults ---------- */
+
+const consultDay = new Date(2026, 9, 16);
+const feed = { consults: [{ t: "Consult: All Stars Unlimited", d: "2026-10-16", s: 975, e: 990 }] };
+
+test("dockEvents projects a consult onto its day, purple by calendar name", () => {
+  const [c] = dockEvents(feed, consultDay);
+  assert.equal(c.startDate.getHours(), 16);
+  assert.equal(c.startDate.getMinutes(), 15);
+  assert.equal(c.calendar.title, "Dock Media");
+  assert.deepEqual(dockEvents(feed, new Date(2026, 9, 17)), []);
+  assert.deepEqual(dockEvents(null, consultDay), []);
+});
+
+test("mergeConsults keeps Calendly's own Apple Calendar copy but recolours it", () => {
+  const mirrored = { title: "15 Minute Consult between Gabriel Alvarez and Metha S", isAllDay: false,
+    startDate: new Date(2026, 9, 16, 16, 15), endDate: new Date(2026, 9, 16, 16, 30), calendar: { title: "Personal" } };
+  const out = mergeConsults([mirrored], dockEvents(feed, consultDay));
+  assert.equal(out.length, 1);
+  assert.equal(out[0].title, mirrored.title);
+  assert.equal(out[0].calendar.title, "Dock Media");
+});
+
+test("mergeConsults leaves an unrelated event at the same time alone", () => {
+  const dentist = { title: "Dentist", isAllDay: false,
+    startDate: new Date(2026, 9, 16, 16, 15), endDate: new Date(2026, 9, 16, 17), calendar: { title: "Personal" } };
+  const out = mergeConsults([dentist], dockEvents(feed, consultDay));
+  assert.deepEqual(out.map(e => e.calendar.title), ["Personal", "Dock Media"]);
 });
