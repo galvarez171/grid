@@ -621,7 +621,7 @@ const SYNC_URL = "https://grid-sync.gabealvarez.workers.dev";
 // Shown in the header. Bump alongside the service worker's CACHE so it's
 // always possible to tell at a glance which build a phone is actually
 // running — a cached shell otherwise looks identical to a fresh one.
-const APP_VERSION = "v25";
+const APP_VERSION = "v26";
 const TOKEN_KEY = "grid.syncToken";
 const syncToken = () => localStorage.getItem(TOKEN_KEY);
 let syncTimer=null;
@@ -1369,7 +1369,7 @@ function renderDock(){
 
   const money = m && m.total7d != null ? "$" + Math.round(m.total7d).toLocaleString() : "–";
   let html = `<div class="dstats">
-      ${stat(n(p.total), "Gyms")}${stat(n(p.contacted), "Contacted")}${stat(n(p.responded), "Replied")}${stat(n(p.client), "Clients")}
+      ${stat(n(p.total), "Prospects")}${stat(n(p.contacted), "Contacted")}${stat(n(p.responded), "Replied")}${stat(n(p.client), "Clients")}
       ${stat(n(p.overdue), "Overdue", p.overdue > 0)}${stat(n(q.warm), "Warm")}${stat(money, "Rev 7d")}${stat(n(m && m.count7d), "Sales 7d")}
     </div>`;
 
